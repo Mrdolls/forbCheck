@@ -16,10 +16,14 @@ It relies on `nm` to inspect unresolved symbols and reports **exact source locat
 
 ---
 
-## 🆕 What's New in v1.7.5
+## 🆕 What's New in v1.8.0
 
-### Auto Detect Binary !
-Say goodbye to lengthy commands! With the new Auto Detect Binary feature, ForbCheck becomes a 100% plug-and-play tool. If you run the script without specifying a target (by simply typing forb), the tool can now figure out what it needs to analyze on its own. It will first intelligently parse your Makefile to extract the name of the final binary. If no Makefile is found, it will automatically fall back to the most recently compiled executable in your current directory. Coupled with the dynamic presets system, this addition allows you to launch a complete, accurate, and secure analysis of your project with a single keystroke. The ultimate user experience!
+### Zero-Config Magic: Auto-Detect Binary & Auto-Preset
+Say goodbye to lengthy commands! With the new Auto-Detect features, ForbCheck becomes a 100% plug-and-play tool. If you run the script without specifying a target (by simply typing forb), the tool will figure out what to analyze on its own. It first intelligently parses your Makefile to extract the name of the final binary. If no Makefile is found, it automatically falls back to the most recently compiled executable in your directory.
+
+But that's not all: once the target is identified, the new Auto-Preset system kicks in. ForbCheck will automatically search your local library for a matching preset (e.g., minishell.preset) and load it silently. You no longer need to manually pass the -P flag! (And don't worry, power users can always bypass this behavior using the new  `-np` / `--no-preset` flag to force the default list).
+
+This powerful combination allows you to launch a complete, accurate, and highly specific analysis of your project with a single keystroke. The ultimate user experience!
 
 
 ### The Ultimate Preset Management System
@@ -80,6 +84,7 @@ forb [options] <target> [-f <files...>]
 | Option | Description |
 |------|-------------|
 | `-P`, `--preset` | Load the preset matching the target name |
+| `-np`, `--no-preset` | Disable auto-preset and force default list |
 | `-gp`, `--get-preset` | Restore default presets (overwrites matches) |
 | `-cp`, `--create-preset` | Create and edit a new preset |
 | `-lp`, `--list-presets` | Show all presets |
