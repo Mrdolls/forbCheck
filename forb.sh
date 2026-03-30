@@ -510,7 +510,7 @@ if [ -f "$TARGET" ]; then
     bin_mtime=$(stat -c %Y "$TARGET" 2>/dev/null)
     target_name=$(basename "$TARGET")
      cache_file="$INSTALL_DIR/.forb_cache"
-    grep "^$(printf '%s\n' "$target_name" | sed 's/[.[\*^$/]/\\&/g'):" "$cache_file"
+    ref_data=$(grep "^$(printf '%s\n' "$target_name" | sed 's/[.[\*^$/]/\\&/g'):" "$cache_file" 2>/dev/null)
     ref_lines=$(echo "$ref_data" | cut -d: -f2)
     ref_size=$(echo "$ref_data" | cut -d: -f3)
     ref_bin_date=$(echo "$ref_data" | cut -d: -f4)
