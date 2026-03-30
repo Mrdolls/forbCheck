@@ -16,7 +16,10 @@ It relies on `nm` to inspect unresolved symbols and reports **exact source locat
 
 ---
 
-## 🆕 What's New in v1.6.1
+## 🆕 What's New in v1.6.3
+
+### Bug Fixes & Stability
+* **Auto-Initialization:** Fixed a bug where running `forb -l` on a fresh install would throw an error. ForbCheck now silently and safely generates its required configuration files (`authorize.txt`) if they are missing.
 
 ### Smarter False-Positive Filtering
 * **Comment Ignoring:** ForbCheck is now smart enough to ignore forbidden keywords found in comments (e.g., `// TODO: remove printf`). It only flags code that actually compiles!
@@ -29,8 +32,7 @@ It relies on `nm` to inspect unresolved symbols and reports **exact source locat
 * **Hybrid List Command:** Use `-l` to view all authorized functions, or `forb -l <func>` to quickly check the status of a specific one.
 * **Global Awareness:** Seamlessly switch between projects (e.g., `minishell` -> `cub3d`). The tool updates its internal reference context instantly.
 * **Cleaner Help:** A reorganized `--help` menu for better readability during those late-night coding sessions.
-
-- Optimized: Even on standard school lab machines, the overhead remains negligible, ensuring your workflow is never interrupted.
+* **Optimized Performance:** Even on standard school lab machines, the overhead remains negligible, ensuring your workflow is never interrupted.
 
 ## Requirements
 
