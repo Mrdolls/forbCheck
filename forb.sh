@@ -303,6 +303,9 @@ process_list() {
 }
 
 run_analysis() {
+    cache_file="$INSTALL_DIR/.forb_cache"
+    mkdir -p "$INSTALL_DIR"
+    [ ! -f "$cache_file" ] && touch "$cache_file"
     local raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/@.*//' | sort -u)
     local forbidden_list=""
     local errors=0
@@ -470,6 +473,9 @@ if [ -n "$TARGET" ]; then
 fi
 
 if [ -f "$TARGET" ]; then
+    cache_file="$INSTALL_DIR/.forb_cache"
+    mkdir -p "$INSTALL_DIR"
+    [ ! -f "$cache_file" ] && touch "$cache_file"
     current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -c "%s" {} + 2>/dev/null | awk '{s+=$1} END {print s}')
     current_src_lines=$(find . -name "*.c" -not -path '*/.*' -type f -exec wc -l {} + 2>/dev/null | awk '{s+=$1} END {print s}')
     bin_mtime=$(stat -c %Y "$TARGET" 2>/dev/null)
