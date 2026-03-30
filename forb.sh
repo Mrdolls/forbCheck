@@ -7,7 +7,7 @@ else
     BOLD=""; GREEN=""; RED=""; YELLOW=""; BLUE=""; CYAN=""; NC=""
 fi
 
-VERSION="1.7.5"
+VERSION="1.8.1"
 INSTALL_DIR="$HOME/.forb"
 AUTH_FILE="$INSTALL_DIR/authorize.txt"
 PRESET_DIR="$INSTALL_DIR/presets"
