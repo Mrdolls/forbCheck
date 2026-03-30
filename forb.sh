@@ -265,6 +265,10 @@ while [[ $# -gt 0 ]]; do
                 check_args+="$1 "
                 shift
             done
+            if [ ! -f "$AUTH_FILE" ]; then
+                mkdir -p "$(dirname "$AUTH_FILE")"
+                touch "$AUTH_FILE"
+            fi
             AUTH_FUNCS=$(tr ',' ' ' < "$AUTH_FILE" 2>/dev/null | tr -s ' ' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             show_list $check_args ;;
         -t|--time) SHOW_TIME=true; shift ;;
