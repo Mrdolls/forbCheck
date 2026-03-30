@@ -268,7 +268,7 @@ show_list() {
     if [ $# -gt 0 ]; then
         echo -e "${BLUE}${BOLD}Checking functions:${NC}"
         for f in "$@"; do
-            if grep -qx "$f" <<< "$AUTH_FUNCS"; then
+            if grep -qFx "$f" <<< "$AUTH_FUNCS"; then
                 echo -e "   [${GREEN}OK${NC}] -> $f"
             else
                 echo -e "   [${RED}KO${NC}] -> $f"
@@ -297,6 +297,10 @@ process_list() {
     if [ ! -f "$AUTH_FILE" ]; then
         mkdir -p "$(dirname "$AUTH_FILE")"
         touch "$AUTH_FILE"
+    fi
+    if [ -L "$AUTH_FILE" ]; then
+        echo "Error: AUTH_FILE must be a regular file, not a symlink"
+        exit 1
     fi
     AUTH_FUNCS=$(tr ',' ' ' < "$AUTH_FILE" 2>/dev/null | tr -s ' ' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     show_list $check_args
@@ -338,7 +342,7 @@ run_analysis() {
         if grep -qx "$func" <<< "$AUTH_FUNCS"; then
             [ "$SHOW_ALL" = true ] && printf "   [${GREEN}OK${NC}]         -> %s\n" "$func"
         else
-            if grep -qE " U ${func}$" <<< "$ALL_UNDEFINED"; then
+            if grep -qE " U ${func}" <<< "$ALL_UNDEFINED"; then
                 forbidden_list+="${func} "
                 if [ -z "$SPECIFIC_FILES" ]; then errors=$((errors + 1)); fi
             fi
@@ -350,12 +354,16 @@ run_analysis() {
             local include_flags=""
             IFS=' ' read -ra FILES_ARRAY <<< "$SPECIFIC_FILES"
         for f in "${FILES_ARRAY[@]}"; do
+            if [[ "$f" =~ \.\. ]] || [[ "$f" =~ ^/ ]]; then
+                echo "Error: Invalid file path: $f"
+                exit 1
+            fi
             f_escaped=$(printf '%s\n' "$f" | sed 's/[[\.*^$/]/\\&/g')
             include_flags+=" --include=\"$f_escaped\""
         done
     
             for f_name in $forbidden_list; do
-            grep_res+=$(eval grep -rHE \"\\b${f_name}\\b\" . $include_flags -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
+            grep_res+=$(grep -rHE \"\\b${f_name}\\b\" . $include_flags -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
             done
     else
         for f_name in $forbidden_list; do
@@ -363,7 +371,7 @@ run_analysis() {
         done
     fi
         for f_name in $forbidden_list; do
-            local specific_locs=$(grep -E ":.*\b${f_name}\b" <<< "$grep_res")
+            local specific_locs=$(grep ":.*$f_name" <<< "$grep_res")
 
         if [ -n "$specific_locs" ]; then
             printf "   [${RED}FORBIDDEN${NC}] -> %s\n" "$f_name"
@@ -502,13 +510,15 @@ if [ -f "$TARGET" ]; then
     bin_mtime=$(stat -c %Y "$TARGET" 2>/dev/null)
     target_name=$(basename "$TARGET")
      cache_file="$INSTALL_DIR/.forb_cache"
-    ref_data=$(grep "^$target_name:" "$cache_file" 2>/dev/null)
+    grep "^$(printf '%s\n' "$target_name" | sed 's/[.[\*^$/]/\\&/g'):" "$cache_file"
     ref_lines=$(echo "$ref_data" | cut -d: -f2)
     ref_size=$(echo "$ref_data" | cut -d: -f3)
     ref_bin_date=$(echo "$ref_data" | cut -d: -f4)
     if [[ "$bin_mtime" != "$ref_bin_date" ]]; then
-        sed -i "/^$target_name:/d" "$cache_file" 2>/dev/null
-        echo "$target_name:$current_src_lines:$current_src_data:$bin_mtime" >> "$cache_file"
+        grep -v "^${target_name}:" "$cache_file" > "$cache_file.tmp"
+        mv "$cache_file.tmp" "$cache_file"
+        target_name_escaped=$(printf '%s\n' "$target_name" | sed 's/:/\\:/g')
+        echo "${target_name_escaped}:$current_src_lines:$current_src_data:$bin_mtime" >> "$cache_file"
         SET_WARNING=false
     else
         diff_size=$((current_src_data - ref_size))
