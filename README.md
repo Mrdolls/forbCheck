@@ -16,13 +16,14 @@ It relies on `nm` to inspect unresolved symbols and reports **exact source locat
 
 ---
 
-## 🆕 What's New in v1.7.0
+## 🆕 What's New in v1.7.1
 
 ### The Ultimate Preset Management System
 * **Create & Edit on the Fly:** Added the `-cp` (`--create-preset`) flag. Instantly generate a new preset and open it in your favorite editor (VS Code, Vim, Nano) without leaving the terminal.
 * **Interactive Removal:** Clean up your workspace with `-rp` (`--remove-preset`). It safely lists your configurations and asks for confirmation before deleting anything.
 * **Quick List & Access:** Use `-lp` (`--list-presets`) to view all your saved presets, or `-op` (`--open-presets`) to pop open the folder directly in your GUI.
 * **Cross-OS Folder Opening:** The `-op` command natively supports Linux (`xdg-open`), macOS (`open`), and even Windows Subsystem for Linux (WSL via `explorer.exe`).
+* **Restore Defaults:** Messed up your configuration or need the official ones? Use the new `-gp` (`--get-presets`) command to safely fetch the latest default presets directly from GitHub (includes a confirmation prompt before overwriting).
 
 ### Smart & Silent Auto-Updates
 * **Lightning-Fast Checks:** ForbCheck now checks for new versions automatically before running an analysis. 
@@ -75,6 +76,7 @@ forb [options] <target> [-f <files...>]
 | Option | Description |
 |------|-------------|
 | `-P`, `--preset` | Load the preset matching the target name |
+| `-gp`, `--get-preset` | Restore default presets (overwrites matches) |
 | `-cp`, `--create-preset` | Create and edit a new preset |
 | `-lp`, `--list-presets` | Show all presets |
 | `-op`, `--open-presets` | Open presets directory |
