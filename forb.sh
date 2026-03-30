@@ -515,8 +515,9 @@ if [ -f "$TARGET" ]; then
     ref_size=$(echo "$ref_data" | cut -d: -f3)
     ref_bin_date=$(echo "$ref_data" | cut -d: -f4)
     if [[ "$bin_mtime" != "$ref_bin_date" ]]; then
-        grep -v "^${target_name}:" "$cache_file" > "$cache_file.tmp"
-        mv "$cache_file.tmp" "$cache_file"
+        tmp_file=$(mktemp)
+        grep -v "^${target_name}:" "$cache_file" > "$tmp_file"
+        mv "$tmp_file" "$cache_file"
         target_name_escaped=$(printf '%s\n' "$target_name" | sed 's/:/\\:/g')
         echo "${target_name_escaped}:$current_src_lines:$current_src_data:$bin_mtime" >> "$cache_file"
         SET_WARNING=false
