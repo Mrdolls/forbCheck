@@ -71,6 +71,15 @@ forb [options] <target> [-f <files...>]
 | `-l`, `--list` `[<funcs...>]` | Show list or check specific functions |
 | `-e`, `--edit` | Edit authorized functions list |
 
+### Presets
+| Option | Description |
+|------|-------------|
+| `-P`, `--preset` | Load the preset matching the target name |
+| `-cp`, `--create-preset` | Create and edit a new preset |
+| `-lp`, `--list-presets` | Show all presets |
+| `-op`, `--open-presets` | Open presets directory |
+| `-rp`, `--remove-presets` | Delete an existing preset |
+
 ### Scan Options
 
 | Option | Description |
@@ -134,11 +143,20 @@ forb -v minishell
 ```
 <img width="545" height="196" alt="image" src="https://github.com/user-attachments/assets/81af8b99-552e-47d7-92e0-83916e4a9bec" />
 
+### Use Presets:
+```bash
+forb -P minishell
+```
+<img width="423" height="258" alt="image" src="https://github.com/user-attachments/assets/ee70ca08-524d-4d2e-9d7f-ef6a1964219a" />
+
+Default Presets list:
+<img width="1058" height="19" alt="image" src="https://github.com/user-attachments/assets/c801051f-ad40-44e6-8c5c-fc66197de399" />
+
 ---
 
-## Authorized Functions
+## Default Authorized Functions
 
-Authorized functions are defined in:
+Default authorized functions are defined in:
 
 ```text
 $HOME/.forb/authorize.txt
