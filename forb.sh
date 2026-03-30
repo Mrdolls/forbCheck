@@ -7,7 +7,7 @@ else
     BOLD=""; GREEN=""; RED=""; YELLOW=""; BLUE=""; CYAN=""; NC=""
 fi
 
-VERSION="1.7.0"
+VERSION="1.7.1"
 INSTALL_DIR="$HOME/.forb"
 AUTH_FILE="$INSTALL_DIR/authorize.txt"
 PRESET_DIR="$INSTALL_DIR/presets"
@@ -32,6 +32,7 @@ show_help() {
 
     echo -e "\n${BOLD}Presets:${NC}"
     printf "  %-24s %s\n" "-P, --preset" "Load the preset matching the target name"
+    printf "  %-24s %s\n" "-gp, --get-presets" "Restore default presets (overwrites matches)"
     printf "  %-24s %s\n" "-cp, --create-preset" "Create and edit a new preset"
     printf "  %-24s %s\n" "-lp, --list-presets" "Show all presets"
     printf "  %-24s %s\n" "-op, --open-presets" "Open presets directory"
@@ -57,29 +58,6 @@ show_help() {
 
 version_to_int() {
     echo "$1" | sed 's/v//' | awk -F. '{ printf("%d%03d%03d\n", $1,$2,$3); }'
-}
-
-update_script() {
-    echo -e "${C_BLUE}Checking for updates...${RC}"
-    local raw_url="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
-    local tmp_file="/tmp/forb_update.sh"
-    if curl -sL "$raw_url" -o "$tmp_file"; then
-        local remote_version=$(grep "^VERSION=" "$tmp_file" | cut -d'"' -f2)
-        if [ "$(version_to_int "$remote_version")" -gt "$(version_to_int "$VERSION")" ]; then
-            echo -e "${YELLOW}New version found: $remote_version Updating...${RC}"
-            mv "$tmp_file" "$0"
-            chmod +x "$0"
-            echo -e "${GREEN}ForbCheck has been updated to $remote_version!${RC}"
-            exit 0
-        else
-            echo -e "${GREEN}ForbCheck is already up to date ($VERSION).${RC}"
-            rm -f "$tmp_file"
-        fi
-    else
-        echo -e "${RED}Error: Failed to download update from GitHub.${RC}"
-        return 1
-    fi
-    exit 0
 }
 
 load_preset() {
@@ -112,6 +90,35 @@ list_presets() {
         echo -e "Available presets: \033[36m$available_presets\033[0m"
     fi
     if [ "$should_exit" -eq 1 ]; then
+        exit 0
+    fi
+}
+
+get_presets() {
+    if [[ "$1" == "manual" ]]; then
+        echo -ne "${YELLOW}${BOLD}Warning: This will download default presets. Any existing preset with the same name will be overwritten. Continue? (y/n): ${NC}"
+        read -r choice
+        case "$choice" in
+            [yY][eE][sS]|[yY]) ;;
+            *)
+                echo -e "${BLUE}Operation aborted.${NC}"
+                exit 0
+                ;;
+        esac
+    fi
+
+    echo -e "${BLUE}Downloading default presets from GitHub...${NC}"
+    mkdir -p "$PRESET_DIR"
+    if curl -sL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C /tmp "forbCheck-main/presets" 2>/dev/null; then
+        cp -r /tmp/forbCheck-main/presets/* "$PRESET_DIR/" 2>/dev/null
+        rm -rf "/tmp/forbCheck-main"
+
+        echo -e "${GREEN}[✔] Default presets successfully downloaded!${NC}"
+    else
+        echo -e "${RED}[✘] Error: Failed to download presets. Check your connection.${NC}"
+    fi
+
+    if [[ "$1" == "manual" ]]; then
         exit 0
     fi
 }
@@ -184,6 +191,30 @@ remove_preset() {
 edit_list() {
     [ ! -f "$AUTH_FILE" ] && mkdir -p "$INSTALL_DIR" && touch "$AUTH_FILE"
     command -v code &>/dev/null && code --wait "$AUTH_FILE" || vim "$AUTH_FILE" || nano "$AUTH_FILE"; exit 0
+}
+
+update_script() {
+    echo -e "${C_BLUE}Checking for updates...${RC}"
+    local raw_url="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
+    local tmp_file="/tmp/forb_update.sh"
+    if curl -sL "$raw_url" -o "$tmp_file"; then
+        local remote_version=$(grep "^VERSION=" "$tmp_file" | cut -d'"' -f2)
+        if [ "$(version_to_int "$remote_version")" -gt "$(version_to_int "$VERSION")" ]; then
+            echo -e "${YELLOW}New version found: $remote_version Updating...${RC}"
+            mv "$tmp_file" "$0"
+            chmod +x "$0"
+            get_presets
+            echo -e "${GREEN}ForbCheck has been updated to $remote_version!${RC}"
+            exit 0
+        else
+            echo -e "${GREEN}ForbCheck is already up to date ($VERSION).${RC}"
+            rm -f "$tmp_file"
+        fi
+    else
+        echo -e "${RED}Error: Failed to download update from GitHub.${RC}"
+        return 1
+    fi
+    exit 0
 }
 
 uninstall_script() {
@@ -383,7 +414,7 @@ auto_check_update() {
 
 args=()
 for arg in "$@"; do
-    if [[ "$arg" == "-mlx" || "$arg" == "-lm" || "$arg" == "-up" || "$arg" == "-op" || "$arg" == "-lp" || "$arg" == "-cp" || "$arg" == "-rp" ]]; then
+    if [[ "$arg" == "-mlx" || "$arg" == "-lm" || "$arg" == "-up" || "$arg" == "-op" || "$arg" == "-lp" || "$arg" == "-cp" || "$arg" == "-rp" || "$arg" == "-gp" ]]; then
         args+=("$arg")
     elif [[ "$arg" == "--"* ]]; then
         args+=("$arg")
@@ -403,6 +434,7 @@ while [[ $# -gt 0 ]]; do
         -up|--update) update_script ;;
         -v) VERBOSE=true; shift ;;
         --preset|-P) USE_PRESET=1; shift ;;
+        -gp|--get-presets) get_presets "manual";;
         -lp|--list-presets) list_presets ;;
         -op|--open-presets) open_presets ;;
         -cp|--create-presets) create_preset ;;
