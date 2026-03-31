@@ -65,12 +65,13 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/Mrdolls/forb/refs/heads/
 ## Usage
 
 ```bash
-forb [options] <target> [-f <files...>]
+forb [options] [target] [-f <files...>]
 ```
 
-### Argument
+### Argument (Optionnal)
 
-- `<target>`: Executable or library to analyze
+- `options`: flags (e.g. `-v`, Look at the `Options` section.)
+- `target`: Executable or library to analyze
 
 ---
 
@@ -80,8 +81,8 @@ forb [options] <target> [-f <files...>]
 | Option | Description |
 |------|-------------|
 | `-h`, `--help` | Display help message |
-| `-l`, `--list` `[<funcs...>]` | Show list or check specific functions |
-| `-e`, `--edit` | Edit authorized functions list |
+| `-l`, `--list` `[<funcs...>]` | Show default authorized functions list |
+| `-e`, `--edit` | Edit default authorized functions list |
 
 ### Presets
 | Option | Description |
@@ -102,7 +103,6 @@ forb [options] <target> [-f <files...>]
 | `-f <files...>` | Limit analysis to specific files |
 | `-p`, `--full-path` | Show full paths |
 | `-a`, `--all` | Show authorized functions during scan |
-| `--no-auto` | Disable automatic library detection |
 
 ### Library Filters
 
@@ -110,6 +110,7 @@ forb [options] <target> [-f <files...>]
 |------|-------------|
 | `-mlx` | Force ignore MiniLibX internal calls |
 | `-lm` | Force Ignore Math library internal calls |
+| `--no-auto` | Disable automatic library detection |
 
 ### Maintenance
 
@@ -125,43 +126,15 @@ forb [options] <target> [-f <files...>]
 
 ### Basic analysis:
 
-```bash
-forb minishell (no forbidden fonctions)
-```
+<img width="593" height="309" alt="image" src="https://github.com/user-attachments/assets/948fb7b5-fe55-4e35-a31e-deca75f98725" />
 
-<img width="405" height="173" alt="image" src="https://github.com/user-attachments/assets/0ee6b142-d969-4ca9-8f46-d16e9d606420" />
+### Basic analysis with forbidden fonction:
 
+<img width="600" height="353" alt="image" src="https://github.com/user-attachments/assets/52db4fbe-7086-49ca-aa6a-a02d5421f5ed" />
 
-### Show execution time:
+### Basic analysis with verbose (`-v`):
 
-```bash
-forb -t minishell (with forbidden fonctions)
-```
-
-<img width="532" height="320" alt="image" src="https://github.com/user-attachments/assets/383a258a-ce57-4c07-98f8-2e5d0cc2eac3" />
-
-
-### Limit analysis to specific files:
-
-```bash
-forb minishell -f heredoc_utils.c
-```
-
-<img width="538" height="202" alt="image" src="https://github.com/user-attachments/assets/7ae6c24a-7452-45ee-aaaf-00f5ffdfcda4" />
-
-
-### Verbose mode:
-
-```bash
-forb -v minishell
-```
-<img width="545" height="196" alt="image" src="https://github.com/user-attachments/assets/81af8b99-552e-47d7-92e0-83916e4a9bec" />
-
-### Use Presets:
-```bash
-forb -P minishell
-```
-<img width="423" height="258" alt="image" src="https://github.com/user-attachments/assets/ee70ca08-524d-4d2e-9d7f-ef6a1964219a" />
+<img width="601" height="354" alt="image" src="https://github.com/user-attachments/assets/1cc0e521-2e63-4a44-ae92-777c926480d7" />
 
 Default Presets list:
 <img width="1058" height="19" alt="image" src="https://github.com/user-attachments/assets/c801051f-ad40-44e6-8c5c-fc66197de399" />
@@ -170,7 +143,7 @@ Default Presets list:
 
 ## Default Authorized Functions
 
-Default authorized functions are defined in:
+Default authorized functions list are defined in:
 
 ```text
 $HOME/.forb/authorize.txt
