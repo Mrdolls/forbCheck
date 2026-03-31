@@ -22,6 +22,9 @@ It relies on `nm` to inspect unresolved symbols and reports **exact source locat
 Say goodbye to lengthy commands! With the new Auto-Detect features, ForbCheck becomes a 100% plug-and-play tool. If you run the script without specifying a target (by simply typing forb), the tool will figure out what to analyze on its own. It first intelligently parses your Makefile to extract the name of the final binary. If no Makefile is found, it automatically falls back to the most recently compiled executable in your directory.
 
 But that's not all: once the target is identified, the new Auto-Preset system kicks in. ForbCheck will automatically search your local library for a matching preset (e.g., minishell.preset) and load it silently. You no longer need to manually pass the -P flag! (And don't worry, power users can always bypass this behavior using the new  `-np` / `--no-preset` flag to force the default list).
+Default Presets list:
+
+<img width="1058" height="19" alt="image" src="https://github.com/user-attachments/assets/c801051f-ad40-44e6-8c5c-fc66197de399" />
 
 
 Libmath is now detected automatically (can be manually overridden with `--no-auto`).
@@ -136,8 +139,18 @@ forb [options] [target] [-f <files...>]
 
 <img width="601" height="354" alt="image" src="https://github.com/user-attachments/assets/1cc0e521-2e63-4a44-ae92-777c926480d7" />
 
-Default Presets list:
-<img width="1058" height="19" alt="image" src="https://github.com/user-attachments/assets/c801051f-ad40-44e6-8c5c-fc66197de399" />
+If the automatic detection doesn't work, here's the manual method:
+
+<img width="592" height="324" alt="image" src="https://github.com/user-attachments/assets/1b27e860-130c-4a6a-82f6-f5d841f89cef" />
+
+`-P` to use the preset to name cub3D, then `cub3D` to specify the executable name.
+
+And if the lib detection doesn't work :
+
+<img width="507" height="294" alt="image" src="https://github.com/user-attachments/assets/93459b4d-ae39-4784-ad50-33a3d8bb9b78" />
+
+`-mlx` Force ignore MiniLibX internal calls
+`-lm` Force ignore Math library internal calls
 
 ---
 
