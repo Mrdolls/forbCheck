@@ -16,37 +16,40 @@ It relies on `nm` to inspect unresolved symbols and reports **exact source locat
 
 ---
 
-## 🆕 What's New in v1.8.1
+## 🆕 What's New in v1.9.0
 
-### Zero-Config Magic: Auto-Detect Binary & Auto-Preset & Auto-Detect libMath
-Say goodbye to lengthy commands! With the new Auto-Detect features, ForbCheck becomes a 100% plug-and-play tool. If you run the script without specifying a target (by simply typing forb), the tool will figure out what to analyze on its own. It first intelligently parses your Makefile to extract the name of the final binary. If no Makefile is found, it automatically falls back to the most recently compiled executable in your directory.
+### The "Deep Scan" Engine (`-s` / `--scan-source`)
+This is the major update of this version. ForbCheck now goes beyond binary analysis by auditing your **source code** directly.
+- **Zero False Positives:** Built with a powerful Perl parser that cleans comments (`/* ... */`, `//`) and strings (`"..."`) before analysis. No more warnings for words inside a `printf` or a comment!
+- **Function Shield:** Automatically extracts and whitelists all functions **you** defined in your project. It perfectly distinguishes between your `ft_printf` and a forbidden `printf`.
+- **Line Mapping:** Provides the exact file name and line number for every forbidden call found.
 
-But that's not all: once the target is identified, the new Auto-Preset system kicks in. ForbCheck will automatically search your local library for a matching preset (e.g., minishell.preset) and load it silently. You no longer need to manually pass the -P flag! (And don't worry, power users can always bypass this behavior using the new  `-np` / `--no-preset` flag to force the default list).
-Default Presets list:
+### Smart Auto-Detection
+ForbCheck is now smarter and faster at identifying your project:
+- **Intelligent Matching:** Automatically loads the correct preset based on your folder name (e.g., `minishell-r` or `Minishell_v2` will both correctly load `minishell.preset`).
+- **Case-Insensitive:** No more manual typing or case issues.
+- **The "Red Button" (`--no-auto`):** A new flag to disable auto-detection and force the interactive selection menu. *Note: Must be placed before `-s`.*
 
-<img width="1058" height="19" alt="image" src="https://github.com/user-attachments/assets/c801051f-ad40-44e6-8c5c-fc66197de399" />
+### Unified Preset Architecture
+- **Goodbye `authorize.txt`:** All configurations are now centralized in the `presets/` directory for a cleaner workspace.
+- **`default.preset`:** Your personalized authorized list has been renamed to `default.preset` for better consistency.
+- **Library Awareness:** Improved handling for **MiniLibX** and **Math Library** (including new math functions like `abs` and `labs`).
 
+---
 
-Libmath is now detected automatically (can be manually overridden with `--no-auto`).
+### Examples
+```bash
+# Auto-detect project and run source scan
+forb -s
 
-This powerful combination allows you to launch a complete, accurate, and highly specific analysis of your project with a single keystroke. The ultimate user experience!
+# Force manual selection and run source scan
+forb --no-auto -s
 
+# Check the help for all new options
+forb -h
+```
 
-### The Ultimate Preset Management System
-* **Create & Edit on the Fly:** Added the `-cp` (`--create-preset`) flag. Instantly generate a new preset and open it in your favorite editor (VS Code, Vim, Nano) without leaving the terminal.
-* **Interactive Removal:** Clean up your workspace with `-rp` (`--remove-preset`). It safely lists your configurations and asks for confirmation before deleting anything.
-* **Quick List & Access:** Use `-lp` (`--list-presets`) to view all your saved presets, or `-op` (`--open-presets`) to pop open the folder directly in your GUI.
-* **Cross-OS Folder Opening:** The `-op` command natively supports Linux (`xdg-open`), macOS (`open`), and even Windows Subsystem for Linux (WSL via `explorer.exe`).
-* **Restore Defaults:** Messed up your configuration or need the official ones? Use the new `-gp` (`--get-presets`) command to safely fetch the latest default presets directly from GitHub (includes a confirmation prompt before overwriting).
-
-### Smart & Silent Auto-Updates
-* **Lightning-Fast Checks:** ForbCheck now checks for new versions automatically before running an analysis. 
-* **Zero Lag Guarantee:** Built with a strict 1-second network timeout, the check is silently bypassed so your workflow is never slowed down.
-
-### UX Polish & CLI Experience
-* **History-Safe Clear:** The terminal now intelligently clears the screen before displaying the final analysis, keeping the output perfectly readable *without* deleting your scrollback history. 
-* **Bulletproof Argument Parsing:** Fixed an edge-case bug where chaining certain short options would confuse the parser. The CLI is now more robust than ever.
-* **Under-the-Hood Refactoring:** Cleaned up the core routing logic (`-l` processing) for better maintainability and faster execution.
+---
 
 ## Requirements
 
