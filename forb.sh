@@ -40,12 +40,14 @@ show_help() {
     printf "  %-24s %s\n" "-rp, --remove-preset" "Delete an existing preset"
 
     echo -e "\n${BOLD}Scan Options:${NC}"
-    printf "  %-24s %s\n" "-s, --source" "Scan source files for unauthorized C functions (use after --no-auto to force menu)"
     printf "  %-24s %s\n" "-v, --verbose" "Show source code context"
     printf "  %-24s %s\n" "<target> -f <files...>" "Limit scan to specific files"
     printf "  %-24s %s\n" "-p, --full-path" "Show full paths"
     printf "  %-24s %s\n" "-a, --all" "Show authorized functions during scan"
     printf "  %-24s %s\n" "--no-auto" "Disable auto-detection (must be used BEFORE -s)"
+
+    echo -e "\n${BOLD}Deep Scan:${NC}"
+    printf "  %-24s %s\n" "-s, --source" "Scan source files for unauthorized C functions (use after --no-auto to force menu)"
 
     echo -e "\n${BOLD}Library Filters:${NC}"
     printf "  %-24s %s\n" "-mlx" "Ignore MiniLibX internal calls"
