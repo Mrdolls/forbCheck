@@ -65,7 +65,7 @@ EOF
         echo -e "${C_GREEN}✔ Added configuration to $HOME/.profile${C_RESET}"
     fi
     echo -e "\n${C_BLUE}Fetching default presets...${C_RESET}"
-    yes | bash "$BIN_PATH" -gp
+    yes | bash "$BIN_PATH" -gp > /dev/null 2>&1
     echo -e "\n${C_GREEN}✔ ForbCheck installed successfully!${C_RESET}"
     echo -e "${C_BLUE}Please restart your terminal or run:${C_RESET}"
     echo -e "  source ~/.zshrc  (if using Zsh)"
