@@ -11,13 +11,14 @@ else
 fi
 
 # Constants
-readonly VERSION="1.9.3"
+readonly VERSION="1.9.5"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
 readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
 
 # Global State Variables (Mutable)
 AUTH_FILE="$PRESET_DIR/default.preset"
+USE_JSON=false
 USE_PRESET=0
 SHOW_ALL=false
 USE_MLX=false
@@ -36,6 +37,12 @@ SET_WARNING=false
 #  SECTION 2: UTILITY FUNCTIONS (Low-level helpers)
 # ==============================================================================
 
+log_info() {
+    if [ "$USE_JSON" = false ]; then
+        echo -e "$@"
+    fi
+}
+
 version_to_int() {
     echo "$1" | sed 's/v//' | awk -F. '{ printf("%d%03d%03d\n", $1,$2,$3); }'
 }
@@ -43,17 +50,22 @@ version_to_int() {
 crop_line() {
     local func="$1"
     local code="$2"
+    local display_code="$code"
 
+    # 1. On coupe si la ligne est trop longue (avec un petit trick pur Bash pour trouver l'index)
     if [ ${#code} -gt 65 ]; then
-        echo "$code" | awk -v f="$func" '{
-            pos = index($0, f);
-            start = (pos > 20) ? pos - 20 : 0;
-            print "..." substr($0, start, 60) "..."
-        }'
-    else
-        echo "$code"
+        local prefix="${code%%$func*}"
+        local pos=${#prefix}
+        local start=$((pos > 20 ? pos - 20 : 0))
+        display_code="...${code:$start:100}..."
     fi
-}
+
+    # 2. Le remplacement magique (0 sed = 0 problème de caractères spéciaux)
+    local final_code="${display_code//$func/$RED$BOLD$func$NC$CYAN}"
+
+    # 3. On affiche le tout avec l'interprétation des couleurs activée
+    echo -e "$final_code"
+}()
 
 clean_code_snippet() {
     local snippet="$1"
@@ -71,6 +83,39 @@ clean_code_snippet() {
     fi
 }
 
+generate_json_output() {
+    local f_name safe_name first_func=true
+
+    echo -n "{"
+    echo -n "\"target\":\"$TARGET\","
+    echo -n "\"version\":\"$VERSION\","
+    echo -n "\"results\":["
+
+    for f_name in $forbidden_list; do
+        [ "$first_func" = false ] && echo -n ","
+        echo -n "{\"function\":\"$f_name\",\"locations\":["
+
+        safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
+        local locations=$(grep -E ":.*\b${safe_name}\b" <<< "$grep_res")
+        local first_loc=true
+
+        while read -r line; do
+            [ -z "$line" ] && continue
+            [ "$first_loc" = false ] && echo -n ","
+
+            local f_path=$(echo "$line" | cut -d: -f1 | sed 's|^\./||')
+            local l_num=$(echo "$line" | cut -d: -f2)
+            echo -n "{\"file\":\"$f_path\",\"line\":$l_num}"
+            first_loc=false
+        done <<< "$locations"
+        echo -n "]}"
+        first_func=false
+    done
+
+    echo -n "],"
+    echo -n "\"status\":$( [ -z "$forbidden_list" ] && echo "\"PERFECT\"" || echo "\"FAILURE\"" )"
+    echo "}"
+}
 
 # ==============================================================================
 #  SECTION 3: PRESET MANAGEMENT
@@ -90,7 +135,7 @@ select_preset() {
             base_name_lower=$(echo "$base_name" | tr '[:upper:]' '[:lower:]')
 
             if [ "$current_dir_lower" == "$base_name_lower" ]; then
-                echo -e "${CYAN}Auto-detected project: ${BOLD}${base_name}${NC}"
+                log_info "${CYAN}Auto-detected project: ${BOLD}${base_name}${NC}"
                 export SELECTED_PRESET="$base_name"
                 return 0
             fi
@@ -103,20 +148,20 @@ select_preset() {
             base_name_lower=$(echo "$base_name" | tr '[:upper:]' '[:lower:]')
 
             if [[ "$current_dir_lower" == *"$base_name_lower"* ]]; then
-                echo -e "${CYAN}Smart-detected project: ${BOLD}${base_name}${NC} (from folder '${current_dir}')"
+                log_info "${CYAN}Smart-detected project: ${BOLD}${base_name}${NC} (from folder '${current_dir}')"
                 export SELECTED_PRESET="$base_name"
                 return 0
             fi
         done
     fi
 
-    [ "$DISABLE_AUTO" == "true" ] && echo -e "\n${YELLOW}${BOLD}Auto-detection disabled by --no-auto flag.${NC}"
-    echo -e "${CYAN}${BOLD}Select a project preset:${NC}"
+    [ "$DISABLE_AUTO" == "true" ] && log_info "\n${YELLOW}${BOLD}Auto-detection disabled by --no-auto flag.${NC}"
+    log_info "${CYAN}${BOLD}Select a project preset:${NC}"
 
     presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
 
     if [ ${#presets[@]} -eq 0 ]; then
-        echo -e "${RED}Error: No presets found in $PRESET_DIR.${NC}"
+        log_info "${RED}Error: No presets found in $PRESET_DIR.${NC}"
         exit 1
     fi
 
@@ -124,10 +169,10 @@ select_preset() {
     select choice in "${presets[@]}"; do
         if [ -n "$choice" ]; then
             export SELECTED_PRESET="$choice"
-            echo -e "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
+            log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
             break
         else
-            echo -e "${RED}Invalid selection. Please enter a valid number.${NC}"
+            log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
         fi
     done
 }
@@ -140,13 +185,13 @@ load_preset() {
     AUTH_FILE="$PRESET_DIR/${target_name}.preset"
 
     if [ ! -f "$AUTH_FILE" ]; then
-        echo -e "\033[31mError: No preset found for '${target_name}'.\033[0m"
+        log_info "\033[31mError: No preset found for '${target_name}'.\033[0m"
         available_presets=$(find "$PRESET_DIR" -maxdepth 1 -name "*.preset" -exec basename {} .preset \; | tr '\n' ',' | sed 's/,/, /g' | sed 's/, $//')
 
         if [ -z "$available_presets" ]; then
-            echo -e "\033[33mNo presets available.\033[0m"
+            log_info "\033[33mNo presets available.\033[0m"
         else
-            echo -e "Available presets: \033[36m$available_presets\033[0m"
+            log_info "Available presets: \033[36m$available_presets\033[0m"
         fi
         exit 1
     fi
@@ -160,9 +205,9 @@ list_presets() {
     available_presets=$(find "$PRESET_DIR" -maxdepth 1 -name "*.preset" -exec basename {} .preset \; | tr '\n' ',' | sed 's/,/, /g' | sed 's/, $//')
 
     if [ -z "$available_presets" ]; then
-        echo -e "\033[33mNo presets available in $PRESET_DIR\033[0m"
+        log_info "\033[33mNo presets available in $PRESET_DIR\033[0m"
     else
-        echo -e "Available presets: \033[36m$available_presets\033[0m"
+        log_info "Available presets: \033[36m$available_presets\033[0m"
     fi
 
     [ "$should_exit" -eq 1 ] && exit 0
@@ -177,17 +222,17 @@ get_presets() {
         read -r choice
         case "$choice" in
             [yY][eE][sS]|[yY]) ;;
-            *) echo -e "${BLUE}Operation aborted.${NC}"; exit 0 ;;
+            *) log_info "${BLUE}Operation aborted.${NC}"; exit 0 ;;
         esac
     fi
 
-    echo -e "${BLUE}Downloading default presets from GitHub...${NC}"
+    log_info "${BLUE}Downloading default presets from GitHub...${NC}"
     mkdir -p "$PRESET_DIR"
 
     if curl -sL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C /tmp "forbCheck-main/presets" 2>/dev/null; then
         if [[ "$mode" == "manual" ]]; then
             cp -r /tmp/forbCheck-main/presets/* "$PRESET_DIR/" 2>/dev/null
-            echo -e "${GREEN}[✔] Default presets successfully restored!${NC}"
+            log_info "${GREEN}[✔] Default presets successfully restored!${NC}"
         else
             added=0
             for preset in /tmp/forbCheck-main/presets/*; do
@@ -199,14 +244,14 @@ get_presets() {
             done
 
             if [ $added -gt 0 ]; then
-                echo -e "${GREEN}[✔] Added $added new preset(s) during update!${NC}"
+                log_info "${GREEN}[✔] Added $added new preset(s) during update!${NC}"
             else
-                echo -e "${GREEN}[✔] Presets checked (no user modifications overwritten).${NC}"
+                log_info "${GREEN}[✔] Presets checked (no user modifications overwritten).${NC}"
             fi
         fi
         rm -rf "/tmp/forbCheck-main"
     else
-        echo -e "${RED}[✘] Error: Failed to download presets. Check your connection.${NC}"
+        log_info "${RED}[✘] Error: Failed to download presets. Check your connection.${NC}"
     fi
 
     [ "$mode" == "manual" ] && exit 0
@@ -214,7 +259,7 @@ get_presets() {
 
 open_presets() {
     mkdir -p "$PRESET_DIR"
-    echo -e "\033[32mOpening presets directory: $PRESET_DIR\033[0m"
+    log_info "\033[32mOpening presets directory: $PRESET_DIR\033[0m"
 
     if command -v explorer.exe > /dev/null; then
         (cd "$PRESET_DIR" && explorer.exe .)
@@ -223,7 +268,7 @@ open_presets() {
     elif command -v open > /dev/null; then
         open "$PRESET_DIR"
     else
-        echo -e "\033[31mError: Could not open the folder automatically. You can find it at: $PRESET_DIR\033[0m"
+        log_info "\033[31mError: Could not open the folder automatically. You can find it at: $PRESET_DIR\033[0m"
     fi
     exit 0
 }
@@ -236,7 +281,7 @@ create_preset() {
     read -r preset_name
 
     if [ -z "$preset_name" ]; then
-        echo -e "${RED}Error: Preset name cannot be empty.${NC}"
+        log_info "${RED}Error: Preset name cannot be empty.${NC}"
         exit 1
     fi
 
@@ -244,14 +289,14 @@ create_preset() {
     new_file="$PRESET_DIR/${preset_name}.preset"
 
     if [ -f "$new_file" ]; then
-        echo -e "${YELLOW}Preset '${preset_name}' already exists. Opening it for edition...${NC}"
+        log_info "${YELLOW}Preset '${preset_name}' already exists. Opening it for edition...${NC}"
     else
-        echo -e "${GREEN}Creating new preset '${preset_name}'...${NC}"
+        log_info "${GREEN}Creating new preset '${preset_name}'...${NC}"
         touch "$new_file"
     fi
 
     command -v code &>/dev/null && code --wait "$new_file" || vim "$new_file" || nano "$new_file"
-    echo -e "${GREEN}[✔] Preset '${preset_name}' saved!${NC}"
+    log_info "${GREEN}[✔] Preset '${preset_name}' saved!${NC}"
     exit 0
 }
 
@@ -263,13 +308,13 @@ remove_preset() {
     read -r preset_name
 
     if [ -z "$preset_name" ]; then
-        echo -e "${RED}Error: Preset name cannot be empty.${NC}"
+        log_info "${RED}Error: Preset name cannot be empty.${NC}"
         exit 1
     fi
 
     target_file="$PRESET_DIR/${preset_name}.preset"
     if [ ! -f "$target_file" ]; then
-        echo -e "${RED}Error: Preset '${preset_name}' does not exist.${NC}"
+        log_info "${RED}Error: Preset '${preset_name}' does not exist.${NC}"
         exit 1
     fi
 
@@ -278,10 +323,10 @@ remove_preset() {
     case "$confirm" in
         [yY][eE][sS]|[yY])
             rm -f "$target_file"
-            echo -e "${GREEN}[✔] Preset '${preset_name}' has been removed.${NC}"
+            log_info "${GREEN}[✔] Preset '${preset_name}' has been removed.${NC}"
             ;;
         *)
-            echo -e "${BLUE}Deletion aborted.${NC}"
+            log_info "${BLUE}Deletion aborted.${NC}"
             ;;
     esac
     exit 0
@@ -298,23 +343,23 @@ show_list() {
     local f
 
     if [ ! -f "$AUTH_FILE" ] || [ ! -s "$AUTH_FILE" ]; then
-        echo -e "${YELLOW}No authorized functions list found. (Use -e to create one)${NC}"
+        log_info "${YELLOW}No authorized functions list found. (Use -e to create one)${NC}"
         exit 0
     fi
 
     if [ $# -gt 1 ]; then # Greater than 1 because $1 is should_exit
         shift
-        echo -e "${BLUE}${BOLD}Checking functions:${NC}"
+        log_info "${BLUE}${BOLD}Checking functions:${NC}"
         for f in "$@"; do
             if grep -qFx "$f" <<< "$AUTH_FUNCS"; then
-                echo -e "   [${GREEN}OK${NC}] -> $f"
+                log_info "   [${GREEN}OK${NC}] -> $f"
             else
-                echo -e "   [${RED}KO${NC}] -> $f"
+                log_info "   [${RED}KO${NC}] -> $f"
             fi
         done
     else
-        echo -e "${BLUE}${BOLD}Authorized functions (Default):${NC} ${CYAN}(Use -e to edit)${NC}"
-        echo "---------------------------------------"
+        log_info "${BLUE}${BOLD}Authorized functions (Default):${NC} ${CYAN}(Use -e to edit)${NC}"
+        log_info "---------------------------------------"
         tr ',' '\n' < "$AUTH_FILE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | column -c 80
     fi
 
@@ -355,14 +400,14 @@ auto_detect_libraries() {
     if ls -R . 2>/dev/null | grep -qiE "mlx|minilibx" || [ -f "libmlx.a" ] || \
         nm "$TARGET" 2>/dev/null | grep -qiE "mlx_"; then
         USE_MLX=true
-        echo -e "${CYAN}[Auto-Detect] MiniLibX detected (Use --no-auto to scan everything)${NC}"
+        log_info "${CYAN}[Auto-Detect] MiniLibX detected (Use --no-auto to scan everything)${NC}"
     fi
 
     if [ "$USE_MATH" = false ] && [ -n "$TARGET" ]; then
         if grep -qE "\-lm\b" Makefile 2>/dev/null || \
            nm -u "$TARGET" 2>/dev/null | grep -qE "\b(sin|cos|sqrt|pow|exp|atan2)f?\b"; then
             USE_MATH=true
-            echo -e "${CYAN}[Auto-Detect] Math library detected (Use --no-auto to scan everything)${NC}"
+            log_info "${CYAN}[Auto-Detect] Math library detected (Use --no-auto to scan everything)${NC}"
         fi
     fi
 }
@@ -375,7 +420,7 @@ auto_detect_target() {
         make_target=$(grep -m 1 -E "^NAME[[:space:]]*=" Makefile | cut -d '=' -f2 | tr -d ' ' | tr -d '"' | tr -d "'")
         if [ -n "$make_target" ] && [ -f "$make_target" ] && nm "$make_target" &>/dev/null; then
             TARGET="$make_target"
-            echo -e "${CYAN}[Auto-Detect] Target found via Makefile: $TARGET${NC}"
+            log_info "${CYAN}[Auto-Detect] Target found via Makefile: $TARGET${NC}"
             return 0
         fi
     fi
@@ -386,7 +431,7 @@ auto_detect_target() {
     for fallback_target in $fallback_targets; do
         if [ -n "$fallback_target" ] && [ -f "$fallback_target" ] && nm "$fallback_target" &>/dev/null; then
             TARGET="$fallback_target"
-            echo -e "${CYAN}[Auto-Detect] Target found via file search: $TARGET${NC}"
+            log_info "${CYAN}[Auto-Detect] Target found via file search: $TARGET${NC}"
             return 0
         fi
     done
@@ -411,16 +456,16 @@ source_scan() {
     local files_list nb_files my_funcs authorized math_funcs keywords macros
 
     select_preset
-    load_preset "$SELECTED_PRESET" || { echo -e "${RED}Error: Preset not found.${NC}"; exit 1; }
+    load_preset "$SELECTED_PRESET" || { log_info "${RED}Error: Preset not found.${NC}"; exit 1; }
 
     files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
     nb_files=$(echo "$files_list" | wc -l | tr -d ' ')
     [ "$nb_files" -eq 0 ] && exit 1
 
-    echo -e "${BLUE}Building compiler-grade function shield...${NC}"
+    log_info "${BLUE}Building compiler-grade function shield...${NC}"
     my_funcs=$(get_user_defined_funcs)
 
-    echo -e "${BLUE}Scanning $nb_files source files...${NC}\n"
+    log_info "${BLUE}Scanning $nb_files source files...${NC}\n"
 
     authorized=$(cat "$AUTH_FILE" 2>/dev/null | tr ',' ' ' | tr '\n' ' ')
 
@@ -480,7 +525,7 @@ source_scan() {
         if (!$found) { print "  \033[32m[OK]\033[0m No unauthorized functions detected.\n"; }
     '
 
-    echo -e "\n${GREEN}Source audit complete.${NC}"
+    log_info "\n${GREEN}Source audit complete.${NC}"
     exit 0
 }
 
@@ -555,7 +600,8 @@ print_analysis_report() {
                     local loc_prefix=$( [ -n "$SPECIFIC_FILES" ] && [ "$VERBOSE" = false ] && echo "line ${l_num}" || echo "${display_name}:${l_num}" )
 
                     if [ "$VERBOSE" = true ]; then
-                        echo -e "          ${YELLOW}↳ Location: ${BLUE}${loc_prefix}${NC}: ${CYAN}$(crop_line "$f_name" "$snippet")${NC}"
+                        local s_crop=$(crop_line "$f_name" "$snippet")
+                        echo -e "          ${YELLOW}↳ Location: ${BLUE}${loc_prefix}${NC}: ${CYAN}${s_crop}${NC}"
                     else
                         echo -e "          ${YELLOW}↳ Location: ${BLUE}${loc_prefix}${NC}"
                     fi
@@ -572,18 +618,45 @@ print_analysis_report() {
     return $errors
 }
 
+build_grep_results() {
+    local f_name safe_name
+    grep_res=""
+
+    for f_name in $forbidden_list; do
+        safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
+
+        if [ -n "$SPECIFIC_FILES" ]; then
+            local include_flags="" f f_escaped FILES_ARRAY
+            IFS=' ' read -ra FILES_ARRAY <<< "$SPECIFIC_FILES"
+            for f in "${FILES_ARRAY[@]}"; do
+                f_escaped=$(printf '%s\n' "$f" | sed 's/[[\.*^$/]/\\&/g')
+                include_flags+=" --include=\"$f_escaped\""
+            done
+            grep_res+=$(grep -rHE "\b${safe_name}\b" . $include_flags -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
+        else
+            grep_res+=$(grep -rHE "\b${safe_name}\b" . --include="*.c" -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
+        fi
+    done
+}
+
 run_analysis() {
     extract_undefined_symbols
     filter_forbidden_functions
 
-    print_analysis_report
-    local total_errors=$?
+    build_grep_results
 
-    if [ $total_errors -eq 0 ] && [ -z "$forbidden_list" ]; then
-        echo -e "\t${GREEN}No forbidden functions detected.${NC}"
+    if [ "$USE_JSON" = true ]; then
+        generate_json_output
+        [ -z "$forbidden_list" ] && return 0 || return 1
+    else
+        print_analysis_report
+        local total_errors=$?
+
+        if [ $total_errors -eq 0 ] && [ -z "$forbidden_list" ]; then
+            log_info "\t${GREEN}No forbidden functions detected.${NC}"
+        fi
+        return $total_errors
     fi
-
-    return $total_errors
 }
 
 check_binary_cache() {
@@ -674,19 +747,19 @@ update_script() {
     local tmp_file="/tmp/forb_update.sh"
     local remote_version
 
-    echo -e "${BLUE}Checking for updates...${NC}"
+    log_info "${BLUE}Checking for updates...${NC}"
 
     if curl -sL "$UPDATE_URL" -o "$tmp_file"; then
         remote_version=$(grep "^VERSION=" "$tmp_file" | cut -d'"' -f2)
         if [ "$(version_to_int "$remote_version")" -gt "$(version_to_int "$VERSION")" ]; then
-            echo -e "${YELLOW}New version found: $remote_version Updating...${NC}"
+            log_info "${YELLOW}New version found: $remote_version Updating...${NC}"
             mv "$tmp_file" "$0"
             chmod +x "$0"
             get_presets
-            echo -e "${GREEN}ForbCheck has been updated to $remote_version!${NC}"
+            log_info "${GREEN}ForbCheck has been updated to $remote_version!${NC}"
             exit 0
         else
-            echo -e "${GREEN}ForbCheck is already up to date ($VERSION).${NC}"
+            log_info "${GREEN}ForbCheck is already up to date ($VERSION).${NC}"
             rm -f "$tmp_file"
         fi
     else
@@ -697,6 +770,9 @@ update_script() {
 }
 
 auto_check_update() {
+    # Skip interactive update check if running in JSON mode (prevents CI hangs)
+    [ "$USE_JSON" = true ] && return
+
     local remote_version choice
 
     # Silent curl with 1-second timeout to prevent lag
@@ -711,7 +787,7 @@ auto_check_update() {
                     update_script
                     ;;
                 *)
-                    echo -e "${BLUE}Update skipped. Starting analysis...${NC}\n"
+                    log_info "${BLUE}Update skipped. Starting analysis...${NC}\n"
                     ;;
             esac
         fi
@@ -724,14 +800,14 @@ uninstall_script() {
     read -r choice
     case "$choice" in
         [yY][eE][sS]|[yY])
-            echo -e "${YELLOW}Uninstalling ForbCheck...${NC}"
+            log_info "${YELLOW}Uninstalling ForbCheck...${NC}"
             sed -i '/alias forb=/d' ~/.zshrc ~/.bashrc 2>/dev/null
             rm -rf "$INSTALL_DIR"
-            echo -e "${GREEN}[✔] ForbCheck has been successfully removed.${NC}"
+            log_info "${GREEN}[✔] ForbCheck has been successfully removed.${NC}"
             exit 0
             ;;
         *)
-            echo -e "${BLUE}Uninstallation aborted.${NC}"
+            log_info "${BLUE}Uninstallation aborted.${NC}"
             exit 0
             ;;
     esac
@@ -779,6 +855,7 @@ set -- "${args[@]}"
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help) show_help ;;
+        --json) USE_JSON=true; shift ;;
         -up|--update) update_script ;;
         --remove) uninstall_script ;;
         --no-auto) DISABLE_AUTO=true; shift ;;
@@ -807,26 +884,28 @@ done
 check_dependencies
 
 # 3. Print Banner
-clear -x
-echo -e "${YELLOW}╔═════════════════════════════════════╗${NC}"
-echo -e "${YELLOW}║              ForbCheck              ║${NC}"
-echo -e "${YELLOW}╚═════════════════════════════════════╝${NC}"
+if [ "$USE_JSON" = false ]; then
+    clear -x
+    log_info "${YELLOW}╔═════════════════════════════════════╗${NC}"
+    log_info "${YELLOW}║              ForbCheck              ║${NC}"
+    log_info "${YELLOW}╚═════════════════════════════════════╝${NC}"
+fi
 
 # 4. Target Validation & Fallback
 if [ -z "$TARGET" ]; then
     auto_detect_target
 
     if [ -z "$TARGET" ]; then
-        echo -e "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
+        log_info "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
         source_scan
     fi
 elif [ ! -f "$TARGET" ]; then
-    echo -e "${YELLOW}[Warning] Target '$TARGET' not found. Falling back to Source Scan...${NC}\n"
+    log_info "${YELLOW}[Warning] Target '$TARGET' not found. Falling back to Source Scan...${NC}\n"
     source_scan
 fi
 
 if ! nm "$TARGET" &>/dev/null; then
-    echo -e "${RED}Error: $TARGET is not a valid binary or object file.${NC}"
+    log_info "${RED}Error: $TARGET is not a valid binary or object file.${NC}"
     exit 1
 fi
 
@@ -840,7 +919,7 @@ if [ "$USE_PRESET" -eq 0 ] && [ "$DISABLE_PRESET" = false ] && [ -n "$TARGET" ];
     target_name=$(basename "$TARGET")
     if [ -f "$PRESET_DIR/${target_name}.preset" ]; then
         USE_PRESET=1
-        echo -e "${CYAN}[Auto-Detect] Preset '${target_name}.preset' detected and loaded automatically.${NC}"
+        log_info "${CYAN}[Auto-Detect] Preset '${target_name}.preset' detected and loaded automatically.${NC}"
     fi
 fi
 
@@ -851,21 +930,24 @@ else
     if [ ! -f "$AUTH_FILE" ] || [ ! -s "$AUTH_FILE" ]; then
         mkdir -p "$HOME/.forb"
         touch "$AUTH_FILE"
-        echo -e "${YELLOW}[Warning] No preset loaded and default.preset is empty. Using empty list.${NC}"
+        log_info "${YELLOW}[Warning] No preset loaded and default.preset is empty. Using empty list.${NC}"
     fi
 fi
 AUTH_FUNCS=$(cat "$AUTH_FILE" 2>/dev/null | tr ',' ' ' | tr -s ' ' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 
 # 7. Print Execution Details
-echo -e "${BLUE}Target bin:${NC} $TARGET\n"
+log_info "${BLUE}Target bin:${NC} $TARGET\n"
+
 if [ "$SET_WARNING" = true ]; then
-    echo -e "${YELLOW}Warning:${NC} Source content is newer than the binary."
-    echo -e "         The results might not reflect your latest changes."
-    echo -e "         Consider ${GREEN}recompiling${NC} to be sure."
+    log_info "${YELLOW}Warning:${NC} Source content is newer than the binary."
+    log_info "         The results might not reflect your latest changes."
+    log_info "         Consider ${GREEN}recompiling${NC} to be sure."
 fi
-[ -n "$SPECIFIC_FILES" ] && echo -e "${BLUE}Scope      :${NC} $SPECIFIC_FILES"
-echo -e "${BLUE}${BOLD}Execution:${NC}"
-echo "-------------------------------------------------"
+
+[ -n "$SPECIFIC_FILES" ] && log_info "${BLUE}Scope      :${NC} $SPECIFIC_FILES"
+
+log_info "${BLUE}${BOLD}Execution:${NC}"
+log_info "-------------------------------------------------"
 
 # 8. Run Core Analysis
 START_TIME=$(date +%s.%N)
@@ -879,20 +961,18 @@ total_errors=$?
 
 # 9. Print Results
 DURATION=$(echo "$(date +%s.%N) - $START_TIME" | bc 2>/dev/null || echo "0")
-echo -e "-------------------------------------------------\n"
 
+log_info "-------------------------------------------------\n"
 if [ $total_errors -eq 0 ]; then
-    echo -ne "\t\t${GREEN}RESULT: PERFECT\n"
+    log_info "\t\t${GREEN}RESULT: PERFECT"
 else
-    [ $total_errors -gt 1 ] && s="s" || s=""
-    echo -ne "\t\t${RED}RESULT: FAILURE\n"
+    log_info "\t\t${RED}RESULT: FAILURE"
 fi
 
 if [ "$SHOW_TIME" = true ]; then
-    DURATION=$(echo "$(date +%s.%N) - $START_TIME" | bc 2>/dev/null || echo "0")
-    printf " (%0.2fs)" "$DURATION"
+    [ "$USE_JSON" = false ] && printf " (%0.2fs)" "$DURATION"
 fi
 
-echo -e "${NC}"
+log_info "${NC}"
 
 [ $total_errors -ne 0 ] && exit 1
