@@ -7,7 +7,7 @@ else
     BOLD=""; GREEN=""; RED=""; YELLOW=""; BLUE=""; CYAN=""; NC=""
 fi
 
-VERSION="1.9.1"
+VERSION="1.9.2"
 INSTALL_DIR="$HOME/.forb"
 PRESET_DIR="$INSTALL_DIR/presets"
 AUTH_FILE="$PRESET_DIR/default.preset"
@@ -487,20 +487,22 @@ clean_code_snippet() {
 auto_detect_target() {
     if [ -f "Makefile" ]; then
         local make_target=$(grep -m 1 -E "^NAME[[:space:]]*=" Makefile | cut -d '=' -f2 | tr -d ' ' | tr -d '"' | tr -d "'")
-
-        if [ -n "$make_target" ] && [ -f "$make_target" ]; then
+        if [ -n "$make_target" ] && [ -f "$make_target" ] && nm "$make_target" &>/dev/null; then
             TARGET="$make_target"
             echo -e "${CYAN}[Auto-Detect] Target found via Makefile: $TARGET${NC}"
             return 0
         fi
     fi
-    local fallback_target=$(find . -maxdepth 1 -type f -executable ! -name "*.sh" ! -name ".*" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n 1 | cut -d' ' -f2 | sed 's|^\./||')
+    local fallback_targets=$(find . -maxdepth 1 -type f -executable ! -name "*.sh" ! -name ".*" -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2 | sed 's|^\./||')
 
-    if [ -n "$fallback_target" ] && [ -f "$fallback_target" ]; then
-        TARGET="$fallback_target"
-        echo -e "${CYAN}[Auto-Detect] Target found via file search: $TARGET${NC}"
-        return 0
-    fi
+    for fallback_target in $fallback_targets; do
+        if [ -n "$fallback_target" ] && [ -f "$fallback_target" ] && nm "$fallback_target" &>/dev/null; then
+            TARGET="$fallback_target"
+            echo -e "${CYAN}[Auto-Detect] Target found via file search: $TARGET${NC}"
+            return 0
+        fi
+    done
+
     return 1
 }
 
@@ -682,13 +684,12 @@ if [ -z "$TARGET" ]; then
     auto_detect_target
 
     if [ -z "$TARGET" ]; then
-        echo -e "${RED}Error: No target specified and auto-detection failed.${NC}"
-        echo -e "Usage: forb [options] <target>"
-        exit 1
+        echo -e "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
+        source_scan
     fi
 elif [ ! -f "$TARGET" ]; then
-    echo -e "${RED}Error: Target '$TARGET' is invalid or does not exist.${NC}"
-    exit 1
+    echo -e "${YELLOW}[Warning] Target '$TARGET' not found. Falling back to Source Scan...${NC}\n"
+    source_scan
 fi
 
 if ! nm "$TARGET" &>/dev/null; then
