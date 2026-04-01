@@ -95,7 +95,7 @@ forb [options] [target] [-f <files...>]
 # Auto-detect binary and run analysis
 forb
 
-# Analyze a specific binary
+# Analyze a specific binary with default preset (-e for edit)
 forb minishell
 
 # Deep source scan (auto-detects project preset)
@@ -108,7 +108,7 @@ forb --no-auto -s
 forb -v minishell
 
 # Use a named preset with a specific binary
-forb -P cub3D cub3D
+forb -P cub3D
 
 # Force-ignore MiniLibX and Math internal calls
 forb -mlx -lm cub3D
