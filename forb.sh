@@ -731,23 +731,48 @@ update_script() {
     local tmp_file="/tmp/forb_update.sh"
     local remote_version
 
-    log_info "${BLUE}Checking for updates...${NC}"
+    log_info "${BLUE}[Update] Checking for latest version at ${CYAN}$UPDATE_URL${NC}..."
 
     if curl -sL "$UPDATE_URL" -o "$tmp_file"; then
-        remote_version=$(grep "^VERSION=" "$tmp_file" | cut -d'"' -f2)
+        log_info "${GREEN}[Update] Download successful.${NC}"
+
+        remote_version=$(grep "^readonly VERSION=" "$tmp_file" | cut -d'"' -f2)
+
+        if [ -z "$remote_version" ]; then
+            log_info "${RED}[Update] Error: Could not parse version from downloaded file.${NC}"
+            rm -f "$tmp_file"
+            return 1
+        fi
+
+        log_info "${BLUE}[Update] Current: ${BOLD}$VERSION${NC}${BLUE} | Remote: ${BOLD}$remote_version${NC}"
+
         if [ "$(version_to_int "$remote_version")" -gt "$(version_to_int "$VERSION")" ]; then
-            log_info "${YELLOW}New version found: $remote_version Updating...${NC}"
-            mv "$tmp_file" "$0"
-            chmod +x "$0"
-            get_presets
-            log_info "${GREEN}ForbCheck has been updated to $remote_version!${NC}"
-            exit 0
+            log_info "${YELLOW}[Update] New version detected! Preparing to overwrite...${NC}"
+
+            if [ ! -w "$0" ]; then
+                log_info "${RED}[Update] Error: No write permission on $0. Try running with sudo or check file owner.${NC}"
+                rm -f "$tmp_file"
+                return 1
+            fi
+            if mv "$tmp_file" "$0" && chmod +x "$0"; then
+                log_info "${GREEN}[Update] Script replaced successfully.${NC}"
+                log_info "${BLUE}[Update] Updating presets...${NC}"
+                get_presets "auto"
+
+                log_info "${GREEN}${BOLD}[Update] ForbCheck has been updated to $remote_version!${NC}"
+                log_info "${CYAN}[Update] Please restart your terminal or run 'forb' again.${NC}"
+                exit 0
+            else
+                log_info "${RED}[Update] Fatal error: Failed to replace $0.${NC}"
+                rm -f "$tmp_file"
+                return 1
+            fi
         else
-            log_info "${GREEN}ForbCheck is already up to date ($VERSION).${NC}"
+            log_info "${GREEN}[Update] ForbCheck is already at the latest version.${NC}"
             rm -f "$tmp_file"
         fi
     else
-        echo -e "${RED}Error: Failed to download update from GitHub.${NC}"
+        log_info "${RED}[Update] Error: Network failure. Could not reach GitHub.${NC}"
         return 1
     fi
     exit 0
