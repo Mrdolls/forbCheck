@@ -11,7 +11,7 @@ else
 fi
 
 # Constants
-readonly VERSION="1.9.5"
+readonly VERSION="1.9.6"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
 readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
@@ -52,7 +52,6 @@ crop_line() {
     local code="$2"
     local display_code="$code"
 
-    # 1. On coupe si la ligne est trop longue (avec un petit trick pur Bash pour trouver l'index)
     if [ ${#code} -gt 65 ]; then
         local prefix="${code%%$func*}"
         local pos=${#prefix}
@@ -60,10 +59,8 @@ crop_line() {
         display_code="...${code:$start:100}..."
     fi
 
-    # 2. Le remplacement magique (0 sed = 0 problème de caractères spéciaux)
     local final_code="${display_code//$func/$RED$BOLD$func$NC$CYAN}"
 
-    # 3. On affiche le tout avec l'interprétation des couleurs activée
     echo -e "$final_code"
 }
 
@@ -384,7 +381,9 @@ process_list() {
         exit 1
     fi
 
-    AUTH_FUNCS=$(tr ',' ' ' < "$AUTH_FILE" 2>/dev/null | tr -s ' ' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [ -f "$AUTH_FILE" ]; then
+        mapfile -t AUTH_FUNCS_ARR < <(tr ',' '\n' < "$AUTH_FILE" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')
+    fi
     show_list 1 $check_args
 }
 
@@ -563,28 +562,11 @@ filter_forbidden_functions() {
 }
 
 print_analysis_report() {
-    local f_name safe_name grep_res specific_locs errors=0
-    grep_res=""
+    local f_name specific_locs errors=0
 
-    # 1. Pre-scan locations with grep
-    for f_name in $forbidden_list; do
-        safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
-        if [ -n "$SPECIFIC_FILES" ]; then
-            local include_flags="" f f_escaped FILES_ARRAY
-            IFS=' ' read -ra FILES_ARRAY <<< "$SPECIFIC_FILES"
-            for f in "${FILES_ARRAY[@]}"; do
-                f_escaped=$(printf '%s\n' "$f" | sed 's/[[\.*^$/]/\\&/g')
-                include_flags+=" --include=\"$f_escaped\""
-            done
-            grep_res+=$(grep -rHE "\b${safe_name}\b" . $include_flags -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
-        else
-            grep_res+=$(grep -rHE "\b${safe_name}\b" . --include="*.c" -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
-        fi
-    done
-
-    # 2. Detailed Display
     for f_name in $forbidden_list; do
         specific_locs=$(grep -E ":.*\b${f_name}\b" <<< "$grep_res")
+
         if [ -n "$specific_locs" ]; then
             printf "   [${RED}FORBIDDEN${NC}] -> %s\n" "$f_name"
             [ -z "$SPECIFIC_FILES" ] && errors=$((errors + 1))
@@ -621,21 +603,22 @@ print_analysis_report() {
 build_grep_results() {
     local f_name safe_name
     grep_res=""
+    local grep_args=("-rHE")
 
     for f_name in $forbidden_list; do
         safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
 
+        local current_grep_args=("${grep_args[@]}" "\b${safe_name}\b" ".")
+
         if [ -n "$SPECIFIC_FILES" ]; then
-            local include_flags="" f f_escaped FILES_ARRAY
-            IFS=' ' read -ra FILES_ARRAY <<< "$SPECIFIC_FILES"
+            read -ra FILES_ARRAY <<< "$SPECIFIC_FILES"
             for f in "${FILES_ARRAY[@]}"; do
-                f_escaped=$(printf '%s\n' "$f" | sed 's/[[\.*^$/]/\\&/g')
-                include_flags+=" --include=\"$f_escaped\""
+                current_grep_args+=("--include=$f")
             done
-            grep_res+=$(grep -rHE "\b${safe_name}\b" . $include_flags -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
         else
-            grep_res+=$(grep -rHE "\b${safe_name}\b" . --include="*.c" -n 2>/dev/null | grep -vE "mlx|MLX")$'\n'
+            current_grep_args+=("--include=*.c")
         fi
+        grep_res+="$(grep "${current_grep_args[@]}" -n 2>/dev/null | grep -vE "mlx|MLX")"$'\n'
     done
 }
 
@@ -876,7 +859,14 @@ while [[ $# -gt 0 ]]; do
         -e) edit_list ;;
         -l|--list) shift; process_list "$@" ;;
         -t|--time) SHOW_TIME=true; shift ;;
-        -f) shift; SPECIFIC_FILES="$@"; break ;;
+        -f)
+            shift
+            while [[ $# -gt 0 && ! "$1" =~ ^- ]]; do
+                SPECIFIC_FILES+="$1 "
+                shift
+            done
+            continue
+            ;;
         -*) echo -e "${RED}Unknown option: $1${NC}"; exit 1 ;;
         *) TARGET=$1; shift ;;
     esac
