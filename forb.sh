@@ -710,6 +710,7 @@ show_help() {
 
     echo -e "\n${BOLD}General:${NC}"
     printf "  %-24s %s\n" "-h, --help" "Show help message"
+    printf "  %-24s %s\n" "--json" "Generate a JSON output for automations"
     printf "  %-24s %s\n" "-l, --list [<funcs...>]" "Show list or check specific functions"
     printf "  %-24s %s\n" "-e, --edit" "Edit authorized list"
 
