@@ -800,6 +800,7 @@ show_help() {
     printf "  %-24s %s\n" "-rp, --remove-preset" "Delete an existing preset"
 
     echo -e "\n${BOLD}Scan Options:${NC}"
+    printf "  %-24s %s\n" "-b, --blacklist" "Force Blacklist Mode (Hunt specific functions instead of whitelist)"
     printf "  %-24s %s\n" "-v, --verbose" "Show source code context"
     printf "  %-24s %s\n" "-f <files...>" "Limit scan to specific files"
     printf "  %-24s %s\n" "-p, --full-path" "Show full paths"
@@ -961,6 +962,7 @@ while [[ $# -gt 0 ]]; do
         -up|--update) update_script ;;
         --remove) uninstall_script ;;
         --no-auto) DISABLE_AUTO=true; shift ;;
+        -b|--blacklist) BLACKLIST_MODE=true; shift ;;
         -s|--scan-source) source_scan ;;
         -v) VERBOSE=true; shift ;;
         -p|--full-path) FULL_PATH=true; shift ;;
