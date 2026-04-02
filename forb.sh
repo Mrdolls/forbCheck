@@ -11,8 +11,8 @@ else
 fi
 
 # Constants
-VERSION="1.9.91"
-readonly VERSION="1.9.91"
+VERSION="1.9.92"
+readonly VERSION="1.9.92"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
 readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
@@ -592,6 +592,8 @@ scan_blacklist() {
                         $clean_file =~ s|^\./||;
                         if ($json_mode ne "true") {
                             printf "  \033[31m[FORBIDDEN]\033[0m -> \033[1m%-15s\033[0m in \033[34m%s:%d\033[0m\n", $fname, $clean_file, $i + 1;
+                        } else {
+                            print "MATCH|-> $fname|in $clean_file:$i+1\n";
                         }
                         $count++;
                     }
