@@ -11,6 +11,7 @@ else
 fi
 
 # Constants
+VERSION="1.9.7"
 readonly VERSION="1.9.7"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
