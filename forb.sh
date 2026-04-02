@@ -1010,7 +1010,7 @@ while [[ $# -gt 0 ]]; do
         -up|--update) update_script ;;
         --remove) uninstall_script ;;
         --no-auto) DISABLE_AUTO=true; shift ;;
-        -b|--blacklist) BLACKLIST_MODE=true; shift ;;
+        -b|--blacklist) MODE_BLACKLIST=true; shift ;;
         -s|--scan-source) source_scan ;;
         -v) VERBOSE=true; shift ;;
         -p|--full-path) FULL_PATH=true; shift ;;
