@@ -87,6 +87,7 @@ forb [options] [target] [-f <files...>]
 | **Library Filters** | `-mlx` | Ignore MiniLibX internal calls |
 | | `-lm` | Ignore Math library internal calls |
 | **Maintenance** | `-t, --time` | Show execution duration |
+| | `--version` | Show version's forbCheck |
 | | `-up, --update` | Check and install the latest version |
 | | `--remove` | Uninstall ForbCheck |
 
