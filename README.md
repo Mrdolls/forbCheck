@@ -68,8 +68,8 @@ forb [options] [target] [-f <files...>]
 | **General** | `<target>` | Executable or library (`.a`, `.o`) to analyze |
 | | `-h, --help` | Show help message |
 | | `--json` | JSON output for CI/CD automations |
-| | `-l, --list [<funcs...>]` | Show authorized list or check specific functions |
-| | `-e` | Open the authorized functions list for editing |
+| | `-l, --list [<funcs...>]` | Show default authorized list or check specific functions |
+| | `-e` | Open the default authorized functions list for editing |
 | **Presets** | `-P, --preset` | Load the preset matching the target name |
 | | `-np, --no-preset` | Disable auto-preset, force default list |
 | | `-gp, --get-presets` | Restore default presets from GitHub |
