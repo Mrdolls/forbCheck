@@ -1,0 +1,14 @@
+# ==============================================================================
+# ForbCheck Preset: fdf
+# ==============================================================================
+#
+# AVAILABLE FLAGS (Add them anywhere in this file to activate):
+# -------------------------------------------------------------
+# BLACKLIST_MODE : Inverts the logic. ALL functions are allowed EXCEPT the ones listed below.
+# ALL_MLX     : Automatically ignores MiniLibX internal functions.
+# ALL_MATH    : Automatically authorizes standard <math.h> functions (cos, sin, etc.).
+#
+# ==============================================================================
+# Add your functions below (one per line or space/comma separated):
+
+open, close, read, write, malloc, free, perror, strerror, exit, gettimeofday, ALL_MATH, ALL_MLX

@@ -11,8 +11,8 @@ else
 fi
 
 # Constants
-VERSION="1.9.7"
-readonly VERSION="1.9.7"
+VERSION="1.9.8"
+readonly VERSION="1.9.8"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
 readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
@@ -24,6 +24,7 @@ USE_PRESET=0
 SHOW_ALL=false
 USE_MLX=false
 USE_MATH=false
+MODE_BLACKLIST=false
 FULL_PATH=false
 VERBOSE=false
 TARGET=""
@@ -271,6 +272,26 @@ open_presets() {
     exit 0
 }
 
+get_preset_template() {
+    local preset_name="$1"
+
+    cat <<EOF
+# ==============================================================================
+# ForbCheck Preset: ${preset_name}
+# ==============================================================================
+#
+# AVAILABLE FLAGS (Add them anywhere in this file to activate):
+# -------------------------------------------------------------
+# BLACKLIST_MODE : Inverts the logic. ALL functions are allowed EXCEPT the ones listed below.
+# ALL_MLX     : Automatically ignores MiniLibX internal functions.
+# ALL_MATH    : Automatically authorizes standard <math.h> functions (cos, sin, etc.).
+#
+# ==============================================================================
+# Add your functions below (one per line or space/comma separated):
+
+EOF
+}
+
 create_preset() {
     local preset_name new_file
     mkdir -p "$PRESET_DIR"
@@ -290,6 +311,7 @@ create_preset() {
         log_info "${YELLOW}Preset '${preset_name}' already exists. Opening it for edition...${NC}"
     else
         log_info "${GREEN}Creating new preset '${preset_name}'...${NC}"
+        get_preset_template "$preset_name" > "$new_file"
         touch "$new_file"
     fi
 
@@ -452,39 +474,82 @@ get_user_defined_funcs() {
     ' $files 2>/dev/null | grep -vE "^(if|while|for|switch|else|return)$" | sort -u | tr '\n' ' '
 }
 
-source_scan() {
-    local files_list nb_files my_funcs authorized math_funcs keywords macros
+parse_preset_flags() {
+    local raw_content="$1"
+    raw_content=$(echo "$raw_content" | sed 's/#.*//g')
 
-    select_preset
-    load_preset "$SELECTED_PRESET" || { log_info "${RED}Error: Preset not found.${NC}"; exit 1; }
+    if echo "$raw_content" | grep -q "BLACKLIST_MODE"; then
+        export MODE_BLACKLIST=true
+        raw_content=$(echo "$raw_content" | sed 's/BLACKLIST_MODE//g')
+    fi
 
-    files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
-    nb_files=$(echo "$files_list" | wc -l | tr -d ' ')
-    [ "$nb_files" -eq 0 ] && exit 1
+    if echo "$raw_content" | grep -q "ALL_MLX"; then
+        USE_MLX=true
+        raw_content=$(echo "$raw_content" | sed 's/ALL_MLX//g')
+    fi
 
-    log_info "${BLUE}Building compiler-grade function shield...${NC}"
-    my_funcs=$(get_user_defined_funcs)
+    if echo "$raw_content" | grep -q "ALL_MATH"; then
+        USE_MATH=true
+        local math_funcs="cos sin tan acos asin atan atan2 cosh sinh tanh exp frexp ldexp log log10 modf pow sqrt ceil fabs floor fmod round trunc abs labs"
+        raw_content=$(echo "$raw_content" | sed 's/ALL_MATH//g')
+        raw_content="$raw_content $math_funcs"
+    fi
 
-    log_info "${BLUE}Scanning $nb_files source files...${NC}\n"
+    AUTH_FUNCS=$(echo "$raw_content" | tr ',' ' ' | tr -s ' ' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')
+}
 
-    authorized=$(cat "$AUTH_FILE" 2>/dev/null | tr ',' ' ' | tr '\n' ' ')
+scan_blacklist() {
+    local files="$1"
+    export BLACKLIST_FUNCS=$(echo "$AUTH_FUNCS" | tr '\n' ' ')
+
+    echo "$files" | tr '\n' '\0' | xargs -0 perl -0777 -e '
+        my %forbidden = map { $_ => 1 } split(" ", $ENV{BLACKLIST_FUNCS});
+        my $found = 0;
+
+        foreach my $file (@ARGV) {
+            open(my $fh, "<", $file) or next;
+            my $content = do { local $/; <$fh> };
+            close($fh);
+
+            # Nettoyage des commentaires et strings
+            $content =~ s{(/\*.*?\*/)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+            $content =~ s{//.*}{}g;
+            $content =~ s{("(?:\\.|[^"\\])*")}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+            $content =~ s{(\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+
+            my @lines = split(/\n/, $content);
+            for (my $i = 0; $i < @lines; $i++) {
+                my $line = $lines[$i];
+
+                while ($line =~ /\b([a-zA-Z_]\w*)\s*\(/g) {
+                    my $fname = $1;
+
+                    # Si la fonction est dans la blacklist -> ERREUR
+                    if ($forbidden{$fname}) {
+                        my $clean_file = $file;
+                        $clean_file =~ s|^\./||;
+                        printf "  \033[31m[FORBIDDEN]\033[0m -> \033[1m%-15s\033[0m in \033[34m%s:%d\033[0m\n", $fname, $clean_file, $i + 1;
+                        $found = 1;
+                    }
+                }
+            }
+        }
+        if (!$found) { print "  \033[32m[OK]\033[0m No forbidden functions detected in blacklist mode.\n"; }
+    '
+}
+
+scan_whitelist() {
+    local files="$1"
+    local user_funcs="$2"
+    local keywords="if while for return sizeof switch else case default do static const volatile struct union enum typedef extern inline unsigned signed short long int char float double void bool va_arg va_start va_end va_list NULL del f"
+    local macros="WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG S_ISDIR S_ISREG"
 
     export ALLOW_MLX=0
-    if [[ "$authorized" == *"ALL_MLX"* ]]; then
-        export ALLOW_MLX=1
-    fi
+    [ "$USE_MLX" = true ] && export ALLOW_MLX=1
 
-    if [[ "$authorized" == *"ALL_MATH"* ]]; then
-        math_funcs="cos sin tan acos asin atan atan2 cosh sinh tanh exp frexp ldexp log log10 modf pow sqrt ceil fabs floor fmod round trunc abs labs"
-        authorized="$authorized $math_funcs"
-    fi
+    export WHITELIST="$(echo "$AUTH_FUNCS" | tr '\n' ' ') $user_funcs $keywords $macros"
 
-    keywords="if while for return sizeof switch else case default do static const volatile struct union enum typedef extern inline unsigned signed short long int char float double void bool va_arg va_start va_end va_list NULL del f"
-    macros="WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG S_ISDIR S_ISREG"
-
-    export WHITELIST="$authorized $my_funcs $keywords $macros"
-
-    echo "$files_list" | tr '\n' '\0' | xargs -0 perl -0777 -e '
+    echo "$files" | tr '\n' '\0' | xargs -0 perl -0777 -e '
         my %safe = map { $_ => 1 } split(" ", $ENV{WHITELIST});
         my $allow_mlx = $ENV{ALLOW_MLX};
         my $found = 0;
@@ -493,11 +558,11 @@ source_scan() {
             if ($allow_mlx == 1 && ($file =~ m{/mlx_} || $file =~ m{/mlx/} || $file =~ m{/minilibx/})) {
                 next;
             }
-
             open(my $fh, "<", $file) or next;
             my $content = do { local $/; <$fh> };
             close($fh);
 
+            # Nettoyage des commentaires et strings
             $content =~ s{(/\*.*?\*/)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
             $content =~ s{//.*}{}g;
             $content =~ s{("(?:\\.|[^"\\])*")}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
@@ -524,6 +589,29 @@ source_scan() {
         }
         if (!$found) { print "  \033[32m[OK]\033[0m No unauthorized functions detected.\n"; }
     '
+}
+
+source_scan() {
+    select_preset
+    load_preset "$SELECTED_PRESET" || { log_info "${RED}Error: Preset not found.${NC}"; exit 1; }
+
+    local files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+    local nb_files=$(echo "$files_list" | wc -l | tr -d ' ')
+    [ "$nb_files" -eq 0 ] && exit 1
+
+    local raw_preset=$(cat "$AUTH_FILE" 2>/dev/null)
+    parse_preset_flags "$raw_preset"
+
+    log_info "${BLUE}Scanning $nb_files source files...${NC}\n"
+
+    if [ "$MODE_BLACKLIST" = true ]; then
+        log_info "${CYAN}Mode: BLACKLIST - Hunting specific functions...${NC}"
+        scan_blacklist "$files_list"
+    else
+        log_info "${BLUE}Building compiler-grade function shield (Whitelist Mode)...${NC}"
+        local my_funcs=$(get_user_defined_funcs)
+        scan_whitelist "$files_list" "$my_funcs"
+    fi
 
     log_info "\n${GREEN}Source audit complete.${NC}"
     exit 0
@@ -545,14 +633,18 @@ filter_forbidden_functions() {
         [ -z "$func" ] && continue
         [[ "$func" =~ ^(_|ITM|edata|end|bss_start) ]] && continue
 
-        # Library Filters (MLX / Math)
         [ "$USE_MLX" = true ] && [[ "$func" =~ ^(X|shm|gethostname|puts|exit|strerror) ]] && continue
         [ "$USE_MATH" = true ] && [[ "$func" =~ ^(abs|cos|sin|sqrt|pow|exp|log|fabs|floor)f?$ ]] && continue
-
-        # Ignore if defined by user in the project
         grep -qx "$func" <<< "$MY_DEFINED" && continue
+        local is_authorized=false
 
-        if grep -qx "$func" <<< "$AUTH_FUNCS"; then
+        if [ "$MODE_BLACKLIST" = true ]; then
+            grep -qx "$func" <<< "$AUTH_FUNCS" || is_authorized=true
+        else
+            grep -qx "$func" <<< "$AUTH_FUNCS" && is_authorized=true
+        fi
+
+        if [ "$is_authorized" = true ]; then
             [ "$SHOW_ALL" = true ] && printf "   [${GREEN}OK${NC}]         -> %s\n" "$func"
         else
             if grep -qE " U ${func}$" <<< "$ALL_UNDEFINED"; then
@@ -950,7 +1042,8 @@ else
         log_info "${YELLOW}[Warning] No preset loaded and default.preset is empty. Using empty list.${NC}"
     fi
 fi
-AUTH_FUNCS=$(cat "$AUTH_FILE" 2>/dev/null | tr ',' ' ' | tr -s ' ' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+RAW_PRESET=$(cat "$AUTH_FILE" 2>/dev/null)
+parse_preset_flags "$RAW_PRESET"
 
 # 7. Print Execution Details
 log_info "${BLUE}Target bin:${NC} $TARGET\n"
@@ -968,10 +1061,6 @@ log_info "-------------------------------------------------"
 
 # 8. Run Core Analysis
 START_TIME=$(date +%s.%N)
-
-NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -A 2>/dev/null)
-ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA")
-MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sort -u)
 
 run_analysis
 total_errors=$?
