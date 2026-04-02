@@ -11,8 +11,8 @@ else
 fi
 
 # Constants
-VERSION="1.9.9"
-readonly VERSION="1.9.9"
+VERSION="1.9.91"
+readonly VERSION="1.9.91"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
 readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
@@ -489,16 +489,41 @@ auto_detect_target() {
 }
 
 get_user_defined_funcs() {
-    local files=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+    local files=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" -o -name "*.h" \))
     [ -z "$files" ] && return
 
-    perl -0777 -ne '
-        s/\/\*.*?\*\///gs;
-        s/\/\/.*//g;
-        while (/\b([a-zA-Z_]\w*)\s*(\((?:[^()]++|(?2))*\))\s*\{/gs) {
-            print "$1\n";
+    echo "$files" | tr '\n' '\0' | xargs -0 perl -e '
+        my %shield;
+        local $/ = undef;
+        my $types = qr/(?:int|char|float|double|long|short|unsigned|signed|void|size_t|ssize_t|pid_t|sig_atomic_t|bool|t_\w+|struct\s+\w+|enum\s+\w+|FILE|DIR)/;
+
+        foreach my $file (@ARGV) {
+            open(my $fh, "<", $file) or next;
+            my $content = <$fh>; close($fh);
+
+            $content =~ s/\/\*.*?\*\//\n/gs;
+            $content =~ s/\/\/.*//g;
+            $content =~ s/"(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27/ /gs;
+
+            my $skeleton = $content;
+            while ($skeleton =~ s/\{[^{}]*\}/;\n/g) {}
+
+            foreach my $line (split /\n/, $skeleton) {
+                next if $line =~ /^\s*$/;
+                if ($line =~ /^(.*?)(\b[a-zA-Z_]\w*\b)(\s*\(.*)$/) {
+                    my $avant = $1;
+                    my $mot = $2;
+
+                    if ($avant =~ /^[\s\w\*]+$/ && $avant =~ /\b(?:$types|static|extern)\b|\*/) {
+                        $shield{$mot} = 1;
+                    }
+                }
+            }
         }
-    ' $files 2>/dev/null | grep -vE "^(if|while|for|switch|else|return)$" | sort -u | tr '\n' ' '
+
+        my $kw = qr/^(if|while|for|return|else|switch|case|default|do|sizeof)$/;
+        foreach my $k (sort keys %shield) { print "$k " unless $k =~ $kw; }
+    ' 2>/dev/null
 }
 
 parse_preset_flags() {
@@ -542,18 +567,16 @@ scan_blacklist() {
 
     echo "$files" | tr '\n' '\0' | xargs -0 perl -0777 -e '
         my %forbidden = map { $_ => 1 } split(" ", $ENV{BLACKLIST_FUNCS});
-        my $found = 0;
+        my $count = 0;
 
         foreach my $file (@ARGV) {
             open(my $fh, "<", $file) or next;
             my $content = do { local $/; <$fh> };
             close($fh);
 
-            # Nettoyage des commentaires et strings
             $content =~ s{(/\*.*?\*/)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
             $content =~ s{//.*}{}g;
-            $content =~ s{("(?:\\.|[^"\\])*")}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
-            $content =~ s{(\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+            $content =~ s{("(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
 
             my @lines = split(/\n/, $content);
             for (my $i = 0; $i < @lines; $i++) {
@@ -562,17 +585,20 @@ scan_blacklist() {
                 while ($line =~ /\b([a-zA-Z_]\w*)\s*\(/g) {
                     my $fname = $1;
 
-                    # Si la fonction est dans la blacklist -> ERREUR
                     if ($forbidden{$fname}) {
                         my $clean_file = $file;
                         $clean_file =~ s|^\./||;
                         printf "  \033[31m[FORBIDDEN]\033[0m -> \033[1m%-15s\033[0m in \033[34m%s:%d\033[0m\n", $fname, $clean_file, $i + 1;
-                        $found = 1;
+                        $count++;
                     }
                 }
             }
         }
-        if (!$found) { print "  \033[32m[OK]\033[0m No forbidden functions detected in blacklist mode.\n"; }
+        if ($count == 0) {
+            print "  \033[32m[OK]\033[0m No forbidden functions detected in blacklist mode.\n";
+        } else {
+            print "\n  \033[0;31m[!] Total: $count forbidden function(s) detected.\033[0m\n";
+        }
     '
 }
 
@@ -590,7 +616,7 @@ scan_whitelist() {
     echo "$files" | tr '\n' '\0' | xargs -0 perl -0777 -e '
         my %safe = map { $_ => 1 } split(" ", $ENV{WHITELIST});
         my $allow_mlx = $ENV{ALLOW_MLX};
-        my $found = 0;
+        my $count = 0;
 
         foreach my $file (@ARGV) {
             if ($allow_mlx == 1 && ($file =~ m{/mlx_} || $file =~ m{/mlx/} || $file =~ m{/minilibx/})) {
@@ -600,11 +626,9 @@ scan_whitelist() {
             my $content = do { local $/; <$fh> };
             close($fh);
 
-            # Nettoyage des commentaires et strings
             $content =~ s{(/\*.*?\*/)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
             $content =~ s{//.*}{}g;
-            $content =~ s{("(?:\\.|[^"\\])*")}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
-            $content =~ s{(\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+            $content =~ s{("(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
 
             my @lines = split(/\n/, $content);
             for (my $i = 0; $i < @lines; $i++) {
@@ -621,11 +645,15 @@ scan_whitelist() {
                     $clean_file =~ s|^\./||;
 
                     printf "  \033[31m[FORBIDDEN]\033[0m -> \033[1m%-15s\033[0m in \033[34m%s:%d\033[0m\n", $fname, $clean_file, $i + 1;
-                    $found = 1;
+                    $count++;
                 }
             }
         }
-        if (!$found) { print "  \033[32m[OK]\033[0m No unauthorized functions detected.\n"; }
+        if ($count == 0) {
+            print "  \033[32m[OK]\033[0m No unauthorized functions detected.\n";
+        } else {
+            print "\n  \033[0;31m[!] Total: $count unauthorized function(s) detected.\033[0m\n";
+        }
     '
 }
 
@@ -774,7 +802,7 @@ run_analysis() {
         if [ $total_errors -eq 0 ] && [ $count -eq 0 ]; then
             log_info "\t${GREEN}No forbidden functions detected.${NC}"
         else
-            log_info "\n${RED}${BOLD}Total forbidden functions found: $count${NC}"
+            log_info "\n${RED}Total forbidden functions found: $count${NC}"
         fi
         return $total_errors
     fi
