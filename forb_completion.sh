@@ -10,19 +10,17 @@ _forb_completions() {
           -lp --list-presets -op --open-presets -rp --remove-preset \
           -b --blacklist -v --verbose -f -p --full-path -a --all --no-auto \
           -s --source -mlx -lm -t --time --version -up --update --remove"
+
     case "$prev" in
         -f)
-            _filedir
-            return 0
-            ;;
-        -rp|--remove-preset)
+            COMPREPLY=( $(compgen -f -- "${cur}") )
             return 0
             ;;
     esac
     if [[ ${cur} == -* ]] ; then
-        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
         return 0
     fi
-    COMPREPLY=( $(compgen -f -- ${cur}) )
+    COMPREPLY=( $(compgen -f -- "${cur}") )
 }
 complete -F _forb_completions forb
