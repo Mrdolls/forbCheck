@@ -11,13 +11,15 @@ else
 fi
 
 # Constants
-readonly VERSION="1.9.93"
+readonly VERSION="1.10.0"
 readonly INSTALL_DIR="$HOME/.forb"
+readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
 readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
 
 # Global State Variables (Mutable)
 ACTIVE_PRESET="$PRESET_DIR/default.preset"
+LOG_FILE=""
 USE_JSON=false
 USE_PRESET=0
 SHOW_ALL=false
@@ -32,15 +34,29 @@ SHOW_TIME=false
 DISABLE_AUTO=false
 DISABLE_PRESET=false
 SET_WARNING=false
+PUT_LOG=false
 
 
 # ==============================================================================
 #  SECTION 2: UTILITY FUNCTIONS (Low-level helpers)
 # ==============================================================================
 
+safe_exit() {
+    local exit_code=${1:-0}
+    if [ "$PUT_LOG" = true ] && [ -n "$LOG_FILE" ] && [ "$USE_JSON" = false ]; then
+        echo -e "\n${BLUE}ℹ Scan log saved to: ${YELLOW}$LOG_FILE${NC}"
+    fi
+
+    exit "$exit_code"
+}
+
 log_info() {
     if [ "$USE_JSON" = false ]; then
-        echo -e "$@"
+        if [ "$PUT_LOG" = true ] && [ -n "$LOG_FILE" ]; then
+            echo -e "$@" | sed 's/\x1b\[[0-9;]*m//g' >> "$LOG_FILE"
+        else
+            echo -e "$@"
+        fi
     fi
 }
 
@@ -154,7 +170,7 @@ prompt_preset_menu() {
 
     if [ ${#presets[@]} -eq 0 ]; then
         log_info "${RED}Error: No presets found in $PRESET_DIR.${NC}"
-        exit 1
+        safe_exit 1
     fi
 
     PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
@@ -247,7 +263,7 @@ load_preset() {
                 log_info "Available presets: \033[36m$available_presets\033[0m"
             fi
         fi
-        exit 1
+        safe_exit 1
     fi
 }
 
@@ -263,7 +279,7 @@ list_presets() {
         log_info "Available presets: \033[36m$available_presets\033[0m"
     fi
 
-    [ "$should_exit" -eq 1 ] && exit 0
+    [ "$should_exit" -eq 1 ] && safe_exit 0
 }
 
 get_presets() {
@@ -275,7 +291,7 @@ get_presets() {
         read -r choice
         case "$choice" in
             [yY][eE][sS]|[yY]) ;;
-            *) log_info "${BLUE}Operation aborted.${NC}"; exit 0 ;;
+            *) log_info "${BLUE}Operation aborted.${NC}"; safe_exit 0 ;;
         esac
     fi
 
@@ -306,7 +322,7 @@ get_presets() {
         log_info "${RED}[✘] Error: Failed to download presets. Check your connection.${NC}"
     fi
 
-    [ "$mode" == "manual" ] && exit 0
+    [ "$mode" == "manual" ] && safe_exit 0
 }
 
 open_presets() {
@@ -321,7 +337,7 @@ open_presets() {
     else
         log_info "\033[31mError: Could not open the folder automatically. You can find it at: $PRESET_DIR\033[0m"
     fi
-    exit 0
+    safe_exit 0
 }
 
 get_preset_template() {
@@ -352,7 +368,7 @@ create_preset() {
 
     if [ -z "$preset_name" ]; then
         log_info "${RED}Error: Preset name cannot be empty.${NC}"
-        exit 1
+        safe_exit 1
     fi
 
     preset_name=$(echo "$preset_name" | tr ' ' '-')
@@ -368,7 +384,7 @@ create_preset() {
 
     open_editor "$new_file"
     log_info "${GREEN}[✔] Preset '${preset_name}' saved!${NC}"
-    exit 0
+    safe_exit 0
 }
 
 remove_preset() {
@@ -380,13 +396,13 @@ remove_preset() {
 
     if [ -z "$preset_name" ]; then
         log_info "${RED}Error: Preset name cannot be empty.${NC}"
-        exit 1
+        safe_exit 1
     fi
 
     target_file="$PRESET_DIR/${preset_name}.preset"
     if [ ! -f "$target_file" ]; then
         log_info "${RED}Error: Preset '${preset_name}' does not exist.${NC}"
-        exit 1
+        safe_exit 1
     fi
 
     echo -ne "${YELLOW}Are you sure you want to delete '${preset_name}'? (y/n): ${NC}"
@@ -400,14 +416,14 @@ remove_preset() {
             log_info "${BLUE}Deletion aborted.${NC}"
             ;;
     esac
-    exit 0
+    safe_exit 0
 }
 
 edit_list() {
     [ ! -f "$ACTIVE_PRESET" ] && touch "$ACTIVE_PRESET"
     open_editor "$ACTIVE_PRESET"
 
-    exit 0
+    safe_exit 0
 }
 
 show_list() {
@@ -416,7 +432,7 @@ show_list() {
 
     if [ ! -f "$ACTIVE_PRESET" ] || [ ! -s "$ACTIVE_PRESET" ]; then
         log_info "${YELLOW}No authorized functions list found. (Use -e to create one)${NC}"
-        exit 0
+        safe_exit 0
     fi
 
     if [ $# -gt 1 ]; then # Greater than 1 because $1 is should_exit
@@ -436,7 +452,7 @@ show_list() {
     " | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | column -c 80
     fi
 
-    [ "$should_exit" -eq 1 ] && exit 0
+    [ "$should_exit" -eq 1 ] && safe_exit 0
 }
 
 process_list() {
@@ -457,7 +473,7 @@ process_list() {
     if [ -L "$ACTIVE_PRESET" ]; then
         echo "Error: ACTIVE_PRESET
      must be a regular file, not a symlink"
-        exit 1
+        safe_exit 1
     fi
 
     if [ -f "$ACTIVE_PRESET" ]; then
@@ -684,14 +700,15 @@ source_scan() {
 
     local files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
     local nb_files=$(echo "$files_list" | wc -l | tr -d ' ')
-    [ "$nb_files" -eq 0 ] && exit 1
+    [ "$nb_files" -eq 0 ] && safe_exit 1
 
     local raw_preset=$(cat "$ACTIVE_PRESET" 2>/dev/null)
     parse_preset_flags "$raw_preset"
 
     log_info "${BLUE}Scanning $nb_files source files...${NC}\n"
-    local scan_output
+
     local my_funcs=$(get_user_defined_funcs)
+    local scan_output
     scan_output=$(scan_source_engine "$files_list" "$my_funcs")
 
     if [ "$USE_JSON" = true ]; then
@@ -699,10 +716,13 @@ source_scan() {
         export IS_SOURCE_SCAN=true
         generate_json_output
     else
-        echo -e "$scan_output"
+        while IFS= read -r line; do
+            log_info "$line"
+        done <<< "$scan_output"
+
         log_info "\n${GREEN}Source audit complete.${NC}"
     fi
-    exit 0
+    safe_exit 0
 }
 
 extract_undefined_symbols() {
@@ -749,7 +769,7 @@ print_analysis_report() {
         specific_locs=$(grep -E ":.*\b${f_name}\b" <<< "$grep_res")
 
         if [ -n "$specific_locs" ]; then
-            printf "   [${RED}FORBIDDEN${NC}] -> %s\n" "$f_name"
+            log_info "   [${RED}FORBIDDEN${NC}] -> $f_name"
             [ -z "$SPECIFIC_FILES" ] && errors=$((errors + 1))
 
             while read -r line; do
@@ -764,18 +784,18 @@ print_analysis_report() {
 
                     if [ "$VERBOSE" = true ]; then
                         local s_crop=$(crop_line "$f_name" "$snippet")
-                        echo -e "          ${YELLOW}↳ Location: ${BLUE}${loc_prefix}${NC}: ${CYAN}${s_crop}${NC}"
+                        log_info "          ${YELLOW}↳ Location: ${BLUE}${loc_prefix}${NC}: ${CYAN}${s_crop}${NC}"
                     else
-                        echo -e "          ${YELLOW}↳ Location: ${BLUE}${loc_prefix}${NC}"
+                        log_info "          ${YELLOW}↳ Location: ${BLUE}${loc_prefix}${NC}"
                     fi
                 fi
             done <<< "$specific_locs"
         elif [ -z "$SPECIFIC_FILES" ]; then
             # Warning block (Found in binary but not in .c)
-            printf "   [${YELLOW}WARNING${NC}]   -> %s\n" "$f_name"
+            log_info "   [${YELLOW}WARNING${NC}]   -> %s\n" "$f_name"
             local objects=$(grep -E " U ${f_name}$" <<< "$ALL_UNDEFINED" | awk -F: '{split($1, path, "/"); print path[length(path)]}' | sort -u | tr '\n' ' ')
-            echo -ne "          ${YELLOW}↳ Found in objects: ${BLUE}${objects}${NC}"
-            [[ "$f_name" =~ ^(strlen|memset|memcpy|printf|puts|putchar)$ ]] && echo -e " ${CYAN}(Builtin?)${NC}" || echo -e " ${CYAN}(Sync?)${NC}"
+            log_info "          ${YELLOW}↳ Found in objects: ${BLUE}${objects}${NC}"
+            [[ "$f_name" =~ ^(strlen|memset|memcpy|printf|puts|putchar)$ ]] && log_info " ${CYAN}(Builtin?)${NC}" || log_info " ${CYAN}(Sync?)${NC}"
         fi
     done
     return $errors
@@ -914,7 +934,7 @@ show_help() {
     printf "  %-24s %s\n" "--version" "Show version's forbCheck"
     printf "  %-24s %s\n" "-up, --update" "Check and install latest version"
     printf "  %-24s %s\n" "--remove" "Remove ForbCheck"
-    exit 0
+    safe_exit 0
 }
 
 update_script() {
@@ -951,7 +971,7 @@ update_script() {
 
                 log_info "${GREEN}${BOLD}[Update] ForbCheck has been updated to $remote_version!${NC}"
                 log_info "${CYAN}[Update] Please restart your terminal or run 'forb' again.${NC}"
-                exit 0
+                safe_exit 0
             else
                 log_info "${RED}[Update] Fatal error: Failed to replace $0.${NC}"
                 rm -f "$tmp_file"
@@ -965,7 +985,7 @@ update_script() {
         log_info "${RED}[Update] Error: Network failure. Could not reach GitHub.${NC}"
         return 1
     fi
-    exit 0
+    safe_exit 0
 }
 
 auto_check_update() {
@@ -1010,11 +1030,11 @@ uninstall_script() {
             rm -rf "$HOME/.forb"
             log_info "${GREEN}[✔] ForbCheck has been successfully removed.${NC}"
             echo -e "${YELLOW}Note: Run 'exec zsh' to refresh your shell.${NC}"
-            exit 0
+            safe_exit 0
             ;;
         *)
             log_info "${BLUE}Uninstallation aborted.${NC}"
-            exit 0
+            safe_exit 0
             ;;
     esac
 }
@@ -1036,9 +1056,10 @@ check_dependencies() {
 
     if [ "$missing_deps" -gt 0 ]; then
         echo -e "${YELLOW}Please install the missing packages to use ForbCheck.${NC}"
-        exit 1
+        safe_exit 1
     fi
 }
+
 
 # ==============================================================================
 #  SECTION 6: MAIN DISPATCHER & EXECUTION
@@ -1065,8 +1086,9 @@ set -- "${args[@]}"
 while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help) show_help ;;
-        --version) log_info "V$VERSION"; exit 0;;
+        --version) log_info "V$VERSION"; safe_exit 0;;
         --json) USE_JSON=true; shift ;;
+        --log) PUT_LOG=true; shift;;
         -up|--update) update_script ;;
         --remove) uninstall_script ;;
         --no-auto) DISABLE_AUTO=true; shift ;;
@@ -1095,20 +1117,28 @@ while [[ $# -gt 0 ]]; do
             done
             continue
             ;;
-        -*) echo -e "${RED}Unknown option: $1${NC}"; exit 1 ;;
+        -*) echo -e "${RED}Unknown option: $1${NC}"; safe_exit 1 ;;
         *) TARGET=$1; shift ;;
     esac
 done
 
+# logs
+if [ "$PUT_LOG" = true ]; then
+    mkdir -p "$LOG_DIR"
+    echo -e "${CYAN}The program is running and logging its output...${RED}"
+    count=$(ls -1 "$LOG_DIR"/*.log 2>/dev/null | wc -l)
+    new_num=$((count + 1))
+    timestamp=$(date +"%Y-%m-%d_%Hh%M")
+    LOG_FILE="$LOG_DIR/l${new_num}_${timestamp}.log"
+fi
+
 mkdir -p "$PRESET_DIR"
 check_dependencies
 
-if [ "$USE_JSON" = false ]; then
-    clear -x
-    log_info "${YELLOW}╔═════════════════════════════════════╗${NC}"
-    log_info "${YELLOW}║              ForbCheck              ║${NC}"
-    log_info "${YELLOW}╚═════════════════════════════════════╝${NC}"
-fi
+#banner
+log_info "${YELLOW}╔═════════════════════════════════════╗${NC}"
+log_info "${YELLOW}║              ForbCheck              ║${NC}"
+log_info "${YELLOW}╚═════════════════════════════════════╝${NC}"
 
 # 4. Target Validation & Fallback
 if [ "$FORCE_SOURCE_SCAN" = true ]; then
@@ -1123,7 +1153,7 @@ if [ -z "$TARGET" ]; then
              log_info "${RED}Error: No target specified and auto-detection is disabled (--no-auto).${NC}"
              log_info "${CYAN}Usage: forb --no-auto <binary_name>  OR  forb --no-auto -s${NC}"
         fi
-        exit 1
+        safe_exit 1
     elif ! auto_detect_target; then
         log_info "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
         source_scan
@@ -1184,9 +1214,6 @@ else
 fi
 
 if [ "$SHOW_TIME" = true ]; then
-    [ "$USE_JSON" = false ] && printf " (%0.2fs)" "$DURATION"
+    log_info "$DURATION"
 fi
-
-log_info "${NC}"
-
-[ $total_errors -ne 0 ] && exit 1
+[ $total_errors -ne 0 ] && safe_exit 1
