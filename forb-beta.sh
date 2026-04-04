@@ -129,7 +129,7 @@ generate_json_output() {
             [ "$first_loc" = false ] && echo -n ","
             local fname=$(echo "$line" | perl -nle 'print $1 if /-> (\S+)/')
             local fpath=$(echo "$line" | perl -nle 'print $1 if /in (\S+?):/')
-            local lnum=$(echo "$line"  | perl -nle 'print $1 if /:(\[0-9\]+)$/')
+            local lnum=$(echo "$line"  | perl -nle 'print $1 if /:([0-9]+)$/')
             echo -n "{\"function\":\"$fname\",\"file\":\"$fpath\",\"line\":$lnum}"
             first_loc=false
         done <<< "$match_data"
@@ -303,8 +303,7 @@ get_presets() {
     fi
 
     log_info "${BLUE}Downloading default presets from GitHub...${NC}"
-
-    if curl -sL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C /tmp "forbCheck-main/presets" 2>/dev/null; then
+    if curl -sfL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C /tmp "forbCheck-main/presets" 2>/dev/null; then
         if [[ "$mode" == "manual" ]]; then
             cp -r /tmp/forbCheck-main/presets/* "$PRESET_DIR/" 2>/dev/null
             log_info "${GREEN}[✔] Default presets successfully restored!${NC}"
@@ -326,7 +325,7 @@ get_presets() {
         fi
         rm -rf "/tmp/forbCheck-main"
     else
-        log_info "${RED}[✘] Error: Failed to download presets. Check your connection.${NC}"
+        log_info "${RED}[✘] Error: Failed to download presets. Check your connection or GitHub URL.${NC}"
     fi
 
     [ "$mode" == "manual" ] && safe_exit 0
@@ -737,12 +736,13 @@ extract_undefined_symbols() {
         raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/^_//' | sed -E 's/@.*//' | sort -u)
         NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -o 2>/dev/null)
         MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sed -E 's/^_//' | sort -u)
+        ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA" | sed -E 's/ U _/ U /')
     else
         raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/@.*//' | sort -u)
         NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -A 2>/dev/null)
         MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sort -u)
+        ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA")
     fi
-    ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA")
 }
 
 filter_forbidden_functions() {
