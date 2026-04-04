@@ -91,5 +91,6 @@ echo -e "\n${GREEN}Installation complete!${NC}"
 echo -e "For more info, see installation log here: ${YELLOW}$LOG_FILE${NC}"
 echo -e "Please restart your terminal or run: ${BLUE}exec zsh${NC} (or exec bash)"
 echo -e "You can now run the beta tool using the command: ${BOLD}forb-beta${NC}"
+echo -e "${RED}Warning, this is a beta version, there may be instabilities and bugs.${NC}"
 
 log_action "Installation completed successfully."
