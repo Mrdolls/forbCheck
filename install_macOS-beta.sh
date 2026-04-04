@@ -37,18 +37,16 @@ fi
 
 chmod +x "$INSTALL_DIR/forb-beta.sh" >> "$LOG_FILE" 2>&1
 log_action "Core files downloaded and made executable."
+ln -sf "$INSTALL_DIR/forb-beta.sh" "$BIN_DIR/forb-beta" >> "$LOG_FILE" 2>&1
+log_action "Symlink created at $BIN_DIR/forb-beta."
 
-# --- LE LIEN SYMBOLIQUE : La commande reste "forb" ---
-ln -sf "$INSTALL_DIR/forb-beta.sh" "$BIN_DIR/forb" >> "$LOG_FILE" 2>&1
-log_action "Symlink created at $BIN_DIR/forb."
-
-# --- CORRECTION DU SED POUR MACOS (On nettoie bien l'alias "forb") ---
+# --- CORRECTION DU SED POUR MACOS ---
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    [ -f "$HOME/.zshrc" ] && sed -i '' '/alias forb=/d' "$HOME/.zshrc" 2>/dev/null
-    [ -f "$HOME/.bashrc" ] && sed -i '' '/alias forb=/d' "$HOME/.bashrc" 2>/dev/null
+    [ -f "$HOME/.zshrc" ] && sed -i '' '/alias forb-beta=/d' "$HOME/.zshrc" 2>/dev/null
+    [ -f "$HOME/.bashrc" ] && sed -i '' '/alias forb-beta=/d' "$HOME/.bashrc" 2>/dev/null
 else
-    [ -f "$HOME/.zshrc" ] && sed -i '/alias forb=/d' "$HOME/.zshrc" 2>/dev/null
-    [ -f "$HOME/.bashrc" ] && sed -i '/alias forb=/d' "$HOME/.bashrc" 2>/dev/null
+    [ -f "$HOME/.zshrc" ] && sed -i '/alias forb-beta=/d' "$HOME/.zshrc" 2>/dev/null
+    [ -f "$HOME/.bashrc" ] && sed -i '/alias forb-beta=/d' "$HOME/.bashrc" 2>/dev/null
 fi
 log_action "Old aliases cleaned up."
 
@@ -92,6 +90,6 @@ fi
 echo -e "\n${GREEN}Installation complete!${NC}"
 echo -e "For more info, see installation log here: ${YELLOW}$LOG_FILE${NC}"
 echo -e "Please restart your terminal or run: ${BLUE}exec zsh${NC} (or exec bash)"
-echo -e "You can now run the tool using the standard command: ${BOLD}forb${NC}"
+echo -e "You can now run the beta tool using the command: ${BOLD}forb-beta${NC}"
 
 log_action "Installation completed successfully."
