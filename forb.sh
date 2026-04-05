@@ -11,11 +11,11 @@ else
 fi
 
 # Constants
-readonly VERSION="1.10.1"
-readonly INSTALL_DIR="$HOME/.forb"
-readonly LOG_DIR="$HOME/.forb/logs"
+readonly VERSION="1.10.0"
+readonly INSTALL_DIR="$HOME/.forb-beta"
+readonly LOG_DIR="$HOME/.forb-beta/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
-readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb.sh"
+readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb-beta.sh"
 
 # Global State Variables (Mutable)
 ACTIVE_PRESET="$PRESET_DIR/default.preset"
@@ -35,6 +35,13 @@ DISABLE_AUTO=false
 DISABLE_PRESET=false
 SET_WARNING=false
 PUT_LOG=false
+
+# Détection OS
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    readonly IS_MAC=true
+else
+    readonly IS_MAC=false
+fi
 
 
 # ==============================================================================
@@ -120,9 +127,12 @@ generate_json_output() {
         while IFS= read -r line; do
             [ -z "$line" ] && continue
             [ "$first_loc" = false ] && echo -n ","
-            local fname=$(echo "$line" | grep -oP '(?<=-> )\S+')
-            local fpath=$(echo "$line" | grep -oP 'in \K\S+(?=:)')
-            local lnum=$(echo "$line"  | grep -oP ':\K[0-9]+$')
+
+            local fname=$(echo "$line" | perl -nle 'print $1 if /-> ([^|]+)/')
+            local fpath=$(echo "$line" | perl -nle 'print $1 if /in (\S+?):/')
+            local lnum=$(echo "$line"  | perl -nle 'print $1 if /:([0-9]+)$/')
+            lnum=${lnum:-0}
+
             echo -n "{\"function\":\"$fname\",\"file\":\"$fpath\",\"line\":$lnum}"
             first_loc=false
         done <<< "$match_data"
@@ -138,8 +148,11 @@ generate_json_output() {
             while read -r line; do
                 [ -z "$line" ] && continue
                 [ "$first_loc" = false ] && echo -n ","
+
                 local f_path=$(echo "$line" | cut -d: -f1 | sed 's|^\./||')
                 local l_num=$(echo "$line" | cut -d: -f2)
+                l_num=${l_num:-0}
+
                 echo -n "{\"file\":\"$f_path\",\"line\":$l_num}"
                 first_loc=false
             done <<< "$locations"
@@ -296,7 +309,7 @@ list_presets() {
 
 get_presets() {
     local mode="$1"
-    local choice added preset base_name
+    local choice added preset base_name tmp_dir
 
     if [[ "$mode" == "manual" ]]; then
         log_info "${YELLOW}${BOLD}Warning: This will download default presets. Any existing preset with the same name will be overwritten. Continue? (y/n): ${NC}"
@@ -306,16 +319,16 @@ get_presets() {
             *) log_info "${BLUE}Operation aborted.${NC}"; safe_exit 0 ;;
         esac
     fi
-
     log_info "${BLUE}Downloading default presets from GitHub...${NC}"
+    tmp_dir=$(mktemp -d)
 
-    if curl -sL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C /tmp "forbCheck-main/presets" 2>/dev/null; then
+    if curl -sfL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmp_dir" "forbCheck-main/presets" 2>/dev/null; then
         if [[ "$mode" == "manual" ]]; then
-            cp -r /tmp/forbCheck-main/presets/* "$PRESET_DIR/" 2>/dev/null
+            cp -r "$tmp_dir/forbCheck-main/presets/"* "$PRESET_DIR/" 2>/dev/null
             log_info "${GREEN}[✔] Default presets successfully restored!${NC}"
         else
             added=0
-            for preset in /tmp/forbCheck-main/presets/*; do
+            for preset in "$tmp_dir/forbCheck-main/presets/"*; do
                 base_name=$(basename "$preset")
                 if [ ! -f "$PRESET_DIR/$base_name" ]; then
                     cp "$preset" "$PRESET_DIR/"
@@ -329,9 +342,10 @@ get_presets() {
                 log_info "${GREEN}[✔] Presets checked (no user modifications overwritten).${NC}"
             fi
         fi
-        rm -rf "/tmp/forbCheck-main"
+        rm -rf "$tmp_dir"
     else
-        log_info "${RED}[✘] Error: Failed to download presets. Check your connection.${NC}"
+        log_info "${RED}[✘] Error: Failed to download presets. Check your connection or GitHub URL.${NC}"
+        rm -rf "$tmp_dir"
     fi
 
     [ "$mode" == "manual" ] && safe_exit 0
@@ -452,7 +466,7 @@ show_list() {
         safe_exit 0
     fi
 
-    if [ $# -gt 1 ]; then # Greater than 1 because $1 is should_exit
+    if [ $# -gt 1 ]; then
         shift
         log_info "${BLUE}${BOLD}Checking functions:${NC}"
         for f in "$@"; do
@@ -465,8 +479,7 @@ show_list() {
     else
         log_info "${BLUE}${BOLD}Authorized functions (Default):${NC} ${CYAN}(Use -e to edit)${NC}"
         log_info "---------------------------------------"
-        tr ',' '\n' < "$ACTIVE_PRESET
-    " | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | column -c 80
+        tr ',' '\n' < "$ACTIVE_PRESET" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | column
     fi
 
     [ "$should_exit" -eq 1 ] && safe_exit 0
@@ -481,10 +494,8 @@ process_list() {
     done
 
     if [ ! -f "$ACTIVE_PRESET" ]; then
-        mkdir -p "$(dirname "$ACTIVE_PRESET
-    ")"
-        touch "$ACTIVE_PRESET
-    "
+        mkdir -p "$(dirname "$ACTIVE_PRESET")"
+        touch "$ACTIVE_PRESET"
     fi
 
     if [ -L "$ACTIVE_PRESET" ]; then
@@ -511,7 +522,7 @@ auto_detect_libraries() {
     [ "$DISABLE_AUTO" = true ] && return
     [ "$USE_MLX" = true ] && return
 
-    if ls -R . 2>/dev/null | grep -qiE "mlx|minilibx" || [ -f "libmlx.a" ] || \
+    if find . -maxdepth 5 -type d \( -name "*mlx*" -o -name "*minilibx*" \) -print -quit | grep -q . || [ -f "libmlx.a" ] || \
         nm "$TARGET" 2>/dev/null | grep -qiE "mlx_"; then
         USE_MLX=true
         log_info "${CYAN}[Auto-Detect] MiniLibX detected (Use --no-auto to scan everything)${NC}"
@@ -541,7 +552,11 @@ auto_detect_target() {
     fi
 
     # 2. Try to detect via recent executable files
-    fallback_targets=$(find . -maxdepth 1 -type f -executable ! -name "*.sh" ! -name ".*" -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2 | sed 's|^\./||')
+    if [ "$IS_MAC" = true ]; then
+        fallback_targets=$(find . -maxdepth 1 -type f -perm +111 ! -name "*.sh" ! -name ".*" -exec stat -f "%m %N" {} + | sort -rn | cut -d' ' -f2- | sed 's|^\./||')
+    else
+        fallback_targets=$(find . -maxdepth 1 -type f -executable ! -name "*.sh" ! -name ".*" -printf '%T@ %p\n' 2>/dev/null | sort -nr | cut -d' ' -f2 | sed 's|^\./||')
+    fi
 
     for fallback_target in $fallback_targets; do
         if [ -n "$fallback_target" ] && [ -f "$fallback_target" ] && nm "$fallback_target" &>/dev/null; then
@@ -718,7 +733,8 @@ source_scan() {
     load_preset "$SELECTED_PRESET" || { log_info "${RED}Error: Preset not found.${NC}"; exit 1; }
 
     local files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
-    local nb_files=$(echo "$files_list" | wc -l | tr -d ' ')
+    [ -z "$files_list" ] && safe_exit 1
+    local nb_files=$(echo "$files_list" | grep -c '^')
     [ "$nb_files" -eq 0 ] && safe_exit 1
 
     local raw_preset=$(cat "$ACTIVE_PRESET" 2>/dev/null)
@@ -745,11 +761,17 @@ source_scan() {
 }
 
 extract_undefined_symbols() {
-    raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/@.*//' | sort -u)
-
-    NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -A 2>/dev/null)
-    ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA")
-    MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sort -u)
+    if [ "$IS_MAC" = true ]; then
+        raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/^_//' | sed -E 's/@.*//' | sort -u)
+        NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -o 2>/dev/null)
+        MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sed -E 's/^_//' | sort -u)
+        ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA" | sed -E 's/ U _/ U /')
+    else
+        raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/@.*//' | sort -u)
+        NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -A 2>/dev/null)
+        MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sort -u)
+        ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA")
+    fi
 }
 
 filter_forbidden_functions() {
@@ -877,9 +899,14 @@ check_binary_cache() {
     mkdir -p "$INSTALL_DIR"
     [ ! -f "$cache_file" ] && touch "$cache_file"
 
-    current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -c "%s" {} + 2>/dev/null | awk '{s+=$1} END {print s}')
-    current_src_lines=$(find . -name "*.c" -not -path '*/.*' -type f -exec wc -l {} + 2>/dev/null | awk '{s+=$1} END {print s}')
-    bin_mtime=$(stat -c %Y "$TARGET" 2>/dev/null)
+    current_src_lines=$(find . -name "*.c" -not -path '*/.*' -type f -exec wc -l {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
+    if [ "$IS_MAC" = true ]; then
+        bin_mtime=$(stat -f %m "$TARGET" 2>/dev/null || echo 0)
+        current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -f "%z" {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
+    else
+        bin_mtime=$(stat -c %Y "$TARGET" 2>/dev/null || echo 0)
+        current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -c "%s" {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
+    fi
     target_name=$(basename "$TARGET")
 
     ref_data=$(grep "^$(printf '%s\n' "$target_name" | sed 's/[.[\*^$/]/\\&/g'):" "$cache_file" 2>/dev/null)
@@ -957,7 +984,7 @@ show_help() {
 }
 
 update_script() {
-    local tmp_file="/tmp/forb_update.sh"
+    local tmp_file=$(mktemp)
     local remote_version
 
     log_info "${BLUE}[Update] Checking for latest version at ${CYAN}$UPDATE_URL${NC}..."
@@ -1002,6 +1029,7 @@ update_script() {
         fi
     else
         log_info "${RED}[Update] Error: Network failure. Could not reach GitHub.${NC}"
+        rm -f "$tmp_file"
         return 1
     fi
     safe_exit 0
@@ -1014,7 +1042,7 @@ auto_check_update() {
     local remote_version choice
 
     # Silent curl with 1-second timeout to prevent lag
-    remote_version=$(curl -s --max-time 1 "$UPDATE_URL" | grep "^VERSION=" | head -n 1 | cut -d'"' -f2)
+    remote_version=$(curl -s --max-time 1 "$UPDATE_URL" | grep "^readonly VERSION=" | head -n 1 | cut -d'"' -f2)
 
     if [ -n "$remote_version" ]; then
         if [ "$(version_to_int "$remote_version")" -gt "$(version_to_int "$VERSION")" ]; then
@@ -1034,20 +1062,32 @@ auto_check_update() {
 
 uninstall_script() {
     local choice
-    echo -ne "${RED}${BOLD}Warning: You are about to uninstall ForbCheck. All configurations will be lost. Continue? (y/n): ${NC}"
+    echo -ne "${RED}${BOLD}Warning: You are about to uninstall ForbCheck-Beta. All configurations will be lost. Continue? (y/n): ${NC}"
     read -r choice
     case "$choice" in
         [yY][eE][sS]|[yY])
-            log_info "${YELLOW}Uninstalling ForbCheck...${NC}"
-            rm -f "$HOME/.local/bin/forb"
-            sed -i '/alias forb=/d' ~/.zshrc ~/.bashrc 2>/dev/null
-            sed -i '/# Autocompletion & ForbCheck/,/source ~\/.forb\/forb_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
-            sed -i '/# ForbCheck Autocompletion/d' ~/.zshrc ~/.bashrc 2>/dev/null
-            sed -i '/forb_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
-            sed -i '/autoload -U +X compinit && compinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
-            sed -i '/autoload -U +X bashcompinit && bashcompinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
-            rm -rf "$HOME/.forb"
-            log_info "${GREEN}[✔] ForbCheck has been successfully removed.${NC}"
+            log_info "${YELLOW}Uninstalling ForbCheck-Beta...${NC}"
+
+            rm -f "$HOME/.local/bin/forb-beta"
+
+            if [ "$IS_MAC" = true ]; then
+                sed -i '' '/alias forb-beta=/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/# Autocompletion & ForbCheck/,/source ~\/.forb-beta\/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/# ForbCheck-Beta Autocompletion/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/autoload -U +X compinit && compinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/autoload -U +X bashcompinit && bashcompinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
+            else
+                sed -i '/alias forb-beta=/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/# Autocompletion & ForbCheck/,/source ~\/.forb-beta\/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/# ForbCheck-Beta Autocompletion/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/autoload -U +X compinit && compinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/autoload -U +X bashcompinit && bashcompinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
+            fi
+            rm -rf "$HOME/.forb-beta"
+
+            log_info "${GREEN}[✔] ForbCheck-Beta has been successfully removed.${NC}"
             echo -e "${YELLOW}Note: Run 'exec zsh' to refresh your shell.${NC}"
             safe_exit 0
             ;;
@@ -1217,13 +1257,22 @@ log_info "${BLUE}${BOLD}Execution:${NC}"
 log_info "-------------------------------------------------"
 
 # 8. Run Core Analysis
-START_TIME=$(date +%s.%N)
+if [ "$IS_MAC" = true ]; then
+    START_TIME=$(perl -MTime::HiRes=time -e 'print time')
+else
+    START_TIME=$(date +%s.%N)
+fi
 
 run_analysis
 total_errors=$?
 
 # 9. Print Results
-DURATION=$(echo "$(date +%s.%N) - $START_TIME" | bc 2>/dev/null || echo "0")
+if [ "$IS_MAC" = true ]; then
+    END_TIME=$(perl -MTime::HiRes=time -e 'print time')
+    DURATION=$(echo "$END_TIME - $START_TIME" | bc 2>/dev/null || echo "0")
+else
+    DURATION=$(echo "$(date +%s.%N) - $START_TIME" | bc 2>/dev/null || echo "0")
+fi
 
 log_info "-------------------------------------------------\n"
 if [ $total_errors -eq 0 ]; then
