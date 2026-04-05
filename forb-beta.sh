@@ -474,14 +474,27 @@ show_list() {
         shift
         log_info "${BLUE}${BOLD}Checking functions:${NC}"
         for f in "$@"; do
-            if grep -qFx "$f" <<< "$AUTH_FUNCS"; then
-                log_info "   [${GREEN}OK${NC}] -> $f"
+            local is_listed=false
+            grep -qFx "$f" <<< "$AUTH_FUNCS" && is_listed=true
+            if [ "$BLACKLIST_MODE" = true ]; then
+                if [ "$is_listed" = true ]; then
+                    log_info "   [${RED}KO${NC}] -> $f (Blacklisted)"
+                else
+                    log_info "   [${GREEN}OK${NC}] -> $f"
+                fi
             else
-                log_info "   [${RED}KO${NC}] -> $f"
+                if [ "$is_listed" = true ]; then
+                    log_info "   [${GREEN}OK${NC}] -> $f"
+                else
+                    log_info "   [${RED}KO${NC}] -> $f"
+                fi
             fi
         done
     else
-        log_info "${BLUE}${BOLD}Authorized functions (Default):${NC} ${CYAN}(Use -e to edit)${NC}"
+        local mode_text="Whitelist"
+        [ "$BLACKLIST_MODE" = true ] && mode_text="Blacklist"
+
+        log_info "${BLUE}${BOLD}Listed functions ($mode_text):${NC} ${CYAN}(Use -e to edit)${NC}"
         log_info "---------------------------------------"
         if [ -n "$AUTH_FUNCS" ]; then
             echo "$AUTH_FUNCS" | column
@@ -500,16 +513,14 @@ process_list() {
         check_args+="$1 "
         shift
     done
-
-    if [ ! -f "$ACTIVE_PRESET" ]; then
-        mkdir -p "$(dirname "$ACTIVE_PRESET")"
-        touch "$ACTIVE_PRESET"
-    fi
+    resolve_preset "list"
+    load_preset "$SELECTED_PRESET"
 
     if [ -L "$ACTIVE_PRESET" ]; then
         echo "Error: ACTIVE_PRESET must be a regular file, not a symlink"
         safe_exit 1
     fi
+
     if [ -f "$ACTIVE_PRESET" ]; then
         local raw_preset=$(cat "$ACTIVE_PRESET" 2>/dev/null)
         parse_preset_flags "$raw_preset"
@@ -517,7 +528,6 @@ process_list() {
 
     show_list 1 $check_args
 }
-
 
 # ==============================================================================
 #  SECTION 4: CORE ENGINE - SCAN & DETECT
@@ -737,7 +747,15 @@ source_scan() {
     resolve_preset "source"
     load_preset "$SELECTED_PRESET" || { log_info "${RED}Error: Preset not found.${NC}"; exit 1; }
 
-    local files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+    local files_list=""
+    if [ -n "$SPECIFIC_FILES" ]; then
+        for f in $SPECIFIC_FILES; do
+            [ -f "$f" ] && files_list+="$f"$'\n'
+        done
+        files_list=$(echo "$files_list" | sed '/^$/d')
+    else
+        files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+    fi
     [ -z "$files_list" ] && safe_exit 1
     local nb_files=$(echo "$files_list" | grep -c '^')
     [ "$nb_files" -eq 0 ] && safe_exit 1
