@@ -127,9 +127,12 @@ generate_json_output() {
         while IFS= read -r line; do
             [ -z "$line" ] && continue
             [ "$first_loc" = false ] && echo -n ","
+
             local fname=$(echo "$line" | perl -nle 'print $1 if /-> ([^|]+)/')
             local fpath=$(echo "$line" | perl -nle 'print $1 if /in (\S+?):/')
             local lnum=$(echo "$line"  | perl -nle 'print $1 if /:([0-9]+)$/')
+            lnum=${lnum:-0}
+
             echo -n "{\"function\":\"$fname\",\"file\":\"$fpath\",\"line\":$lnum}"
             first_loc=false
         done <<< "$match_data"
@@ -145,8 +148,11 @@ generate_json_output() {
             while read -r line; do
                 [ -z "$line" ] && continue
                 [ "$first_loc" = false ] && echo -n ","
+
                 local f_path=$(echo "$line" | cut -d: -f1 | sed 's|^\./||')
                 local l_num=$(echo "$line" | cut -d: -f2)
+                l_num=${l_num:-0}
+
                 echo -n "{\"file\":\"$f_path\",\"line\":$l_num}"
                 first_loc=false
             done <<< "$locations"
@@ -179,22 +185,26 @@ prompt_preset_menu() {
     fi
 
     local presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
-    exec 3<&0
-    exec 0</dev/tty
+    if [ -t 0 ] || [ -c /dev/tty ]; then
+        exec 3<&0
+        exec 0</dev/tty
 
-    PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
-    select choice in "${presets[@]}"; do
-        if [ -n "$choice" ]; then
-            export SELECTED_PRESET="$choice"
-            log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
-            break
-        else
-            log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
-        fi
-    done
-
-    exec 0<&3
-    exec 3<&-
+        PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
+        select choice in "${presets[@]}"; do
+            if [ -n "$choice" ]; then
+                export SELECTED_PRESET="$choice"
+                log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
+                break
+            else
+                log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
+            fi
+        done
+        exec 0<&3
+        exec 3<&-
+    else
+        log_info "${RED}Error: Non-interactive environment detected. Please explicitly provide a preset (e.g., using -P or matching folder name).${NC}"
+        safe_exit 1
+    fi
 
     if [ -z "$SELECTED_PRESET" ]; then
          log_info "${RED}Error: Preset selection aborted.${NC}"
@@ -303,7 +313,7 @@ list_presets() {
 
 get_presets() {
     local mode="$1"
-    local choice added preset base_name
+    local choice added preset base_name tmp_dir
 
     if [[ "$mode" == "manual" ]]; then
         log_info "${YELLOW}${BOLD}Warning: This will download default presets. Any existing preset with the same name will be overwritten. Continue? (y/n): ${NC}"
@@ -313,15 +323,16 @@ get_presets() {
             *) log_info "${BLUE}Operation aborted.${NC}"; safe_exit 0 ;;
         esac
     fi
-
     log_info "${BLUE}Downloading default presets from GitHub...${NC}"
-    if curl -sfL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C /tmp "forbCheck-main/presets" 2>/dev/null; then
+    tmp_dir=$(mktemp -d)
+
+    if curl -sfL "https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmp_dir" "forbCheck-main/presets" 2>/dev/null; then
         if [[ "$mode" == "manual" ]]; then
-            cp -r /tmp/forbCheck-main/presets/* "$PRESET_DIR/" 2>/dev/null
+            cp -r "$tmp_dir/forbCheck-main/presets/"* "$PRESET_DIR/" 2>/dev/null
             log_info "${GREEN}[✔] Default presets successfully restored!${NC}"
         else
             added=0
-            for preset in /tmp/forbCheck-main/presets/*; do
+            for preset in "$tmp_dir/forbCheck-main/presets/"*; do
                 base_name=$(basename "$preset")
                 if [ ! -f "$PRESET_DIR/$base_name" ]; then
                     cp "$preset" "$PRESET_DIR/"
@@ -335,9 +346,10 @@ get_presets() {
                 log_info "${GREEN}[✔] Presets checked (no user modifications overwritten).${NC}"
             fi
         fi
-        rm -rf "/tmp/forbCheck-main"
+        rm -rf "$tmp_dir"
     else
         log_info "${RED}[✘] Error: Failed to download presets. Check your connection or GitHub URL.${NC}"
+        rm -rf "$tmp_dir"
     fi
 
     [ "$mode" == "manual" ] && safe_exit 0
@@ -471,7 +483,11 @@ show_list() {
     else
         log_info "${BLUE}${BOLD}Authorized functions (Default):${NC} ${CYAN}(Use -e to edit)${NC}"
         log_info "---------------------------------------"
-        tr ',' '\n' < "$ACTIVE_PRESET" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | column
+        if [ -n "$AUTH_FUNCS" ]; then
+            echo "$AUTH_FUNCS" | column
+        else
+            log_info "${YELLOW}(List is empty)${NC}"
+        fi
     fi
 
     [ "$should_exit" -eq 1 ] && safe_exit 0
@@ -491,17 +507,14 @@ process_list() {
     fi
 
     if [ -L "$ACTIVE_PRESET" ]; then
-        echo "Error: ACTIVE_PRESET
-     must be a regular file, not a symlink"
+        echo "Error: ACTIVE_PRESET must be a regular file, not a symlink"
         safe_exit 1
     fi
-
     if [ -f "$ACTIVE_PRESET" ]; then
-        AUTH_FUNCS_ARR=()
-        while IFS= read -r line; do
-             AUTH_FUNCS_ARR+=("$line")
-        done < <(tr ',' '\n' < "$ACTIVE_PRESET" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')
+        local raw_preset=$(cat "$ACTIVE_PRESET" 2>/dev/null)
+        parse_preset_flags "$raw_preset"
     fi
+
     show_list 1 $check_args
 }
 
@@ -514,7 +527,7 @@ auto_detect_libraries() {
     [ "$DISABLE_AUTO" = true ] && return
     [ "$USE_MLX" = true ] && return
 
-    if ls -R . 2>/dev/null | grep -qiE "mlx|minilibx" || [ -f "libmlx.a" ] || \
+    if find . -maxdepth 5 -type d \( -name "*mlx*" -o -name "*minilibx*" \) -print -quit | grep -q . || [ -f "libmlx.a" ] || \
         nm "$TARGET" 2>/dev/null | grep -qiE "mlx_"; then
         USE_MLX=true
         log_info "${CYAN}[Auto-Detect] MiniLibX detected (Use --no-auto to scan everything)${NC}"
@@ -725,7 +738,8 @@ source_scan() {
     load_preset "$SELECTED_PRESET" || { log_info "${RED}Error: Preset not found.${NC}"; exit 1; }
 
     local files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
-    local nb_files=$(echo "$files_list" | wc -l | tr -d ' ')
+    [ -z "$files_list" ] && safe_exit 1
+    local nb_files=$(echo "$files_list" | grep -c '^')
     [ "$nb_files" -eq 0 ] && safe_exit 1
 
     local raw_preset=$(cat "$ACTIVE_PRESET" 2>/dev/null)
@@ -890,13 +904,13 @@ check_binary_cache() {
     mkdir -p "$INSTALL_DIR"
     [ ! -f "$cache_file" ] && touch "$cache_file"
 
-    current_src_lines=$(find . -name "*.c" -not -path '*/.*' -type f -exec wc -l {} + 2>/dev/null | awk '{s+=$1} END {print s}')
+    current_src_lines=$(find . -name "*.c" -not -path '*/.*' -type f -exec wc -l {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
     if [ "$IS_MAC" = true ]; then
-        bin_mtime=$(stat -f %m "$TARGET" 2>/dev/null)
-        current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -f "%z" {} + 2>/dev/null | awk '{s+=$1} END {print s}')
+        bin_mtime=$(stat -f %m "$TARGET" 2>/dev/null || echo 0)
+        current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -f "%z" {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
     else
-        bin_mtime=$(stat -c %Y "$TARGET" 2>/dev/null)
-        current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -c "%s" {} + 2>/dev/null | awk '{s+=$1} END {print s}')
+        bin_mtime=$(stat -c %Y "$TARGET" 2>/dev/null || echo 0)
+        current_src_data=$(find . -name "*.c" -not -path '*/.*' -type f -exec stat -c "%s" {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
     fi
     target_name=$(basename "$TARGET")
 
@@ -975,7 +989,7 @@ show_help() {
 }
 
 update_script() {
-    local tmp_file="/tmp/forb_update.sh"
+    local tmp_file=$(mktemp)
     local remote_version
 
     log_info "${BLUE}[Update] Checking for latest version at ${CYAN}$UPDATE_URL${NC}..."
@@ -1020,6 +1034,7 @@ update_script() {
         fi
     else
         log_info "${RED}[Update] Error: Network failure. Could not reach GitHub.${NC}"
+        rm -f "$tmp_file"
         return 1
     fi
     safe_exit 0
