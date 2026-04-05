@@ -11,7 +11,7 @@ else
 fi
 
 # Constants
-readonly VERSION="1.10.0"
+readonly VERSION="1.10.1"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
@@ -166,12 +166,14 @@ prompt_preset_menu() {
     [ "$DISABLE_AUTO" == "true" ] && log_info "\n${YELLOW}${BOLD}Auto-detection disabled by --no-auto flag.${NC}"
     log_info "${CYAN}${BOLD}Select a project preset:${NC}"
 
-    local presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
-
-    if [ ${#presets[@]} -eq 0 ]; then
-        log_info "${RED}Error: No presets found in $PRESET_DIR.${NC}"
-        safe_exit 1
+    if [ ! -f "$PRESET_DIR/default.preset" ]; then
+        mkdir -p "$PRESET_DIR"
+        touch "$PRESET_DIR/default.preset"
     fi
+
+    local presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
+    exec 3<&0
+    exec 0</dev/tty
 
     PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
     select choice in "${presets[@]}"; do
@@ -179,8 +181,18 @@ prompt_preset_menu() {
             export SELECTED_PRESET="$choice"
             log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
             break
+        else
+            log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
         fi
-    done >&2
+    done
+
+    exec 0<&3
+    exec 3<&-
+
+    if [ -z "$SELECTED_PRESET" ]; then
+         log_info "${RED}Error: Preset selection aborted.${NC}"
+         safe_exit 1
+    fi
 }
 
 auto_find_preset() {
@@ -190,7 +202,7 @@ auto_find_preset() {
     for preset_file in "$PRESET_DIR"/*.preset; do
         [ -e "$preset_file" ] || continue
         base_name=$(basename "$preset_file" .preset)
-        base_name_lower=$(echo "$base_name" | tr '[:upper:]' '[:lower:]')
+        base_name_lower=$(log_info "$base_name" | tr '[:upper:]' '[:lower:]')
 
         if [[ "$target_name_lower" == *"$base_name_lower"* ]]; then
             export SELECTED_PRESET="$base_name"
@@ -254,7 +266,7 @@ load_preset() {
         available_presets=$(find "$PRESET_DIR" -maxdepth 1 -name "*.preset" -exec basename {} .preset \; | tr '\n' ',' | sed 's/,/, /g' | sed 's/, $//')
 
         if [ "$USE_JSON" = true ]; then
-            echo "{\"target\":\"$TARGET\",\"version\":\"$VERSION\",\"error\":\"No preset found for '${target_name}'\",\"status\":\"FAILURE\"}"
+            log_info "{\"target\":\"$TARGET\",\"version\":\"$VERSION\",\"error\":\"No preset found for '${target_name}'\",\"status\":\"FAILURE\"}"
         else
             log_info "\033[31mError: No preset found for '${target_name}'.\033[0m"
             if [ -z "$available_presets" ]; then
@@ -287,7 +299,7 @@ get_presets() {
     local choice added preset base_name
 
     if [[ "$mode" == "manual" ]]; then
-        echo -ne "${YELLOW}${BOLD}Warning: This will download default presets. Any existing preset with the same name will be overwritten. Continue? (y/n): ${NC}"
+        log_info "${YELLOW}${BOLD}Warning: This will download default presets. Any existing preset with the same name will be overwritten. Continue? (y/n): ${NC}"
         read -r choice
         case "$choice" in
             [yY][eE][sS]|[yY]) ;;
@@ -396,6 +408,11 @@ remove_preset() {
 
     if [ -z "$preset_name" ]; then
         log_info "${RED}Error: Preset name cannot be empty.${NC}"
+        safe_exit 1
+    fi
+
+    if [ "$preset_name" = "default" ]; then
+        log_info "${RED}Error: The 'default' preset is a core file and cannot be removed.${NC}"
         safe_exit 1
     fi
 
