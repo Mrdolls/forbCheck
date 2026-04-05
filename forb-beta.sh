@@ -173,12 +173,14 @@ prompt_preset_menu() {
     [ "$DISABLE_AUTO" == "true" ] && log_info "\n${YELLOW}${BOLD}Auto-detection disabled by --no-auto flag.${NC}"
     log_info "${CYAN}${BOLD}Select a project preset:${NC}"
 
-    local presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
-
-    if [ ${#presets[@]} -eq 0 ]; then
-        log_info "${RED}Error: No presets found in $PRESET_DIR.${NC}"
-        safe_exit 1
+    if [ ! -f "$PRESET_DIR/default.preset" ]; then
+        mkdir -p "$PRESET_DIR"
+        touch "$PRESET_DIR/default.preset"
     fi
+
+    local presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
+    exec 3<&0
+    exec 0</dev/tty
 
     PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
     select choice in "${presets[@]}"; do
@@ -186,8 +188,18 @@ prompt_preset_menu() {
             export SELECTED_PRESET="$choice"
             log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
             break
+        else
+            log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
         fi
-    done >&2
+    done
+
+    exec 0<&3
+    exec 3<&-
+
+    if [ -z "$SELECTED_PRESET" ]; then
+         log_info "${RED}Error: Preset selection aborted.${NC}"
+         safe_exit 1
+    fi
 }
 
 auto_find_preset() {
@@ -402,6 +414,11 @@ remove_preset() {
 
     if [ -z "$preset_name" ]; then
         log_info "${RED}Error: Preset name cannot be empty.${NC}"
+        safe_exit 1
+    fi
+
+    if [ "$preset_name" = "default" ]; then
+        log_info "${RED}Error: The 'default' preset is a core file and cannot be removed.${NC}"
         safe_exit 1
     fi
 
