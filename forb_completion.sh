@@ -23,4 +23,4 @@ _forb_completions() {
     fi
     COMPREPLY=( $(compgen -f -- "${cur}") )
 }
-complete -F _forb_completions forb
+complete -F _forb_completions forb forb-beta
