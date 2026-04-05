@@ -477,8 +477,10 @@ process_list() {
     fi
 
     if [ -f "$ACTIVE_PRESET" ]; then
-        mapfile -t AUTH_FUNCS_ARR < <(tr ',' '\n' < "$ACTIVE_PRESET
-    " | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')
+        AUTH_FUNCS_ARR=()
+        while IFS= read -r line; do
+             AUTH_FUNCS_ARR+=("$line")
+        done < <(tr ',' '\n' < "$ACTIVE_PRESET" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')
     fi
     show_list 1 $check_args
 }
