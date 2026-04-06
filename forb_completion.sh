@@ -5,9 +5,9 @@ _forb_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="-h --help --json -l --list -e --edit \
+    opts="-h --help --json --html -l --list -e --edit \
           -P --preset -np --no-preset -gp --get-presets -cp --create-preset \
-          -lp --list-presets -op --open-presets -rp --remove-preset \
+          -lp --list-presets -op --open-presets -rp --remove-preset -oh --open-html \
           -b --blacklist -v --verbose -f -p --full-path -a --all --no-auto \
           -s --source -mlx -lm -t --time --version -up --update --remove --log"
 
@@ -23,4 +23,4 @@ _forb_completions() {
     fi
     COMPREPLY=( $(compgen -f -- "${cur}") )
 }
-complete -F _forb_completions forb forb-beta
+complete -F _forb_completions forb
