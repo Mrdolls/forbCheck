@@ -11,7 +11,7 @@ else
 fi
 
 # Constants
-readonly VERSION="1.10.0"
+readonly VERSION="1.11.0"
 readonly INSTALL_DIR="$HOME/.forb-beta"
 readonly LOG_DIR="$HOME/.forb-beta/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
@@ -35,6 +35,19 @@ DISABLE_AUTO=false
 DISABLE_PRESET=false
 SET_WARNING=false
 PUT_LOG=false
+
+SHOW_HELP=false
+SHOW_VERSION=false
+DO_UPDATE=false
+DO_REMOVE=false
+DO_GET_PRESETS=false
+DO_LIST_PRESETS=false
+DO_OPEN_PRESETS=false
+DO_CREATE_PRESET=false
+DO_REMOVE_PRESET=false
+DO_EDIT_LIST=false
+RUN_LIST=false
+LIST_FUNCS=""
 
 # Détection OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -168,7 +181,12 @@ generate_json_output() {
 
 open_editor() {
     local target_file="$1"
-    command -v code &>/dev/null && code --wait "$target_file" || vim "$target_file" || nano "$target_file"
+
+    if command -v code &>/dev/null; then
+        code -r "$target_file"
+    else
+        vim "$target_file" || nano "$target_file"
+    fi
 }
 
 # ==============================================================================
@@ -256,11 +274,25 @@ resolve_preset() {
         export SELECTED_PRESET="default"
         return 0
     fi
+
+    if [ -z "$SELECTED_PRESET" ] && [ -n "$project_name" ]; then
+        if [ -f "$PRESET_DIR/${project_name}.preset" ]; then
+            export SELECTED_PRESET="$project_name"
+            [ "$DISABLE_AUTO" != "true" ] && log_info "${CYAN}[Auto-Detect] Preset : ${BOLD}${project_name}${NC} (Exact match)"
+            return 0
+        fi
+    fi
+
     if [ "$DISABLE_AUTO" != "true" ] && [ -z "$SELECTED_PRESET" ]; then
         project_name_lower=$(echo "$project_name" | tr '[:upper:]' '[:lower:]')
         auto_find_preset "$project_name_lower"
     fi
     [ -n "$SELECTED_PRESET" ] && return 0
+
+    if [ "$DO_EDIT_LIST" = true ] || [ "$RUN_LIST" = true ]; then
+        prompt_preset_menu
+        return 0
+    fi
 
     if [ "$USE_JSON" = true ] || [ "$mode" == "binary" ]; then
         export SELECTED_PRESET="default"
@@ -1167,12 +1199,12 @@ set -- "${args[@]}"
 # 2. Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -h|--help) show_help ;;
-        --version) log_info "V$VERSION"; safe_exit 0;;
+        -h|--help) SHOW_HELP=true; shift ;;
+        --version) SHOW_VERSION=true; shift ;;
         --json) USE_JSON=true; shift ;;
-        --log) PUT_LOG=true; shift;;
-        -up|--update) update_script ;;
-        --remove) uninstall_script ;;
+        --log) PUT_LOG=true; shift ;;
+        -up|--update) DO_UPDATE=true; shift ;;
+        --remove) DO_REMOVE=true; shift ;;
         --no-auto) DISABLE_AUTO=true; shift ;;
         -b|--blacklist) export BLACKLIST_MODE=true; shift ;;
         -s|--scan-source) FORCE_SOURCE_SCAN=true; shift ;;
@@ -1183,13 +1215,20 @@ while [[ $# -gt 0 ]]; do
         -lm) USE_MATH=true; shift ;;
         --preset|-P) USE_PRESET=1; shift ;;
         -np|--no-preset) DISABLE_PRESET=true; shift ;;
-        -gp|--get-presets) get_presets "manual";;
-        -lp|--list-presets) list_presets ;;
-        -op|--open-presets) open_presets ;;
-        -cp|--create-presets) create_preset ;;
-        -rp|--remove-preset) remove_preset ;;
-        -e) edit_list ;;
-        -l|--list) shift; process_list "$@" ;;
+        -gp|--get-presets) DO_GET_PRESETS=true; shift ;;
+        -lp|--list-presets) DO_LIST_PRESETS=true; shift ;;
+        -op|--open-presets) DO_OPEN_PRESETS=true; shift ;;
+        -cp|--create-presets) DO_CREATE_PRESET=true; shift ;;
+        -rp|--remove-preset) DO_REMOVE_PRESET=true; shift ;;
+        -e) DO_EDIT_LIST=true; shift ;;
+        -l|--list)
+            RUN_LIST=true; shift
+            while [[ $# -gt 0 && ! "$1" =~ ^- && ! -f "$1" && "$1" != "$TARGET" ]]; do
+                LIST_FUNCS+="$1 "
+                shift
+            done
+            continue
+            ;;
         -t|--time) SHOW_TIME=true; shift ;;
         -f)
             shift
@@ -1203,6 +1242,16 @@ while [[ $# -gt 0 ]]; do
         *) TARGET=$1; shift ;;
     esac
 done
+
+if [ "$SHOW_HELP" = true ]; then show_help; fi
+if [ "$SHOW_VERSION" = true ]; then log_info "V$VERSION"; safe_exit 0; fi
+if [ "$DO_UPDATE" = true ]; then update_script; fi
+if [ "$DO_REMOVE" = true ]; then uninstall_script; fi
+if [ "$DO_GET_PRESETS" = true ]; then get_presets "manual"; fi
+if [ "$DO_LIST_PRESETS" = true ]; then list_presets; fi
+if [ "$DO_OPEN_PRESETS" = true ]; then open_presets; fi
+if [ "$DO_CREATE_PRESET" = true ]; then create_preset; fi
+if [ "$DO_REMOVE_PRESET" = true ]; then remove_preset; fi
 
 # logs
 if [ "$PUT_LOG" = true ]; then
@@ -1222,27 +1271,37 @@ log_info "${YELLOW}╔═══════════════════�
 log_info "${YELLOW}║              ForbCheck              ║${NC}"
 log_info "${YELLOW}╚═════════════════════════════════════╝${NC}"
 
-# 4. Target Validation & Fallback
 if [ "$FORCE_SOURCE_SCAN" = true ]; then
     source_scan
 fi
 
 if [ -z "$TARGET" ]; then
     if [ "$DISABLE_AUTO" = true ]; then
-        if [ "$USE_JSON" = true ]; then
+        if [ "$DO_EDIT_LIST" = true ] || [ "$RUN_LIST" = true ]; then
+            :
+        elif [ "$USE_JSON" = true ]; then
              echo "{\"target\":\"\",\"version\":\"$VERSION\",\"error\":\"No target specified and auto-detection is disabled.\",\"status\":\"FAILURE\"}"
+             safe_exit 1
         else
              log_info "${RED}Error: No target specified and auto-detection is disabled (--no-auto).${NC}"
              log_info "${CYAN}Usage: forb --no-auto <binary_name>  OR  forb --no-auto -s${NC}"
+             safe_exit 1
         fi
-        safe_exit 1
     elif ! auto_detect_target; then
-        log_info "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
-        source_scan
+        if [ "$DO_EDIT_LIST" = true ] || [ "$RUN_LIST" = true ]; then
+            :
+        else
+            log_info "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
+            source_scan
+        fi
     fi
 elif [ ! -f "$TARGET" ]; then
-    log_info "${YELLOW}[Warning] Target '$TARGET' not found. Falling back to Source Scan...${NC}\n"
-    source_scan
+    if [ "$DO_EDIT_LIST" = true ] || [ "$RUN_LIST" = true ]; then
+        :
+    else
+        log_info "${YELLOW}[Warning] Target '$TARGET' not found. Falling back to Source Scan...${NC}\n"
+        source_scan
+    fi
 fi
 
 # 5. Pre-run Setup (Updates, Cache, Libraries)
@@ -1253,6 +1312,13 @@ auto_detect_libraries
 # 6. Load Presets
 resolve_preset "binary"
 load_preset "$SELECTED_PRESET"
+
+if [ "$DO_EDIT_LIST" = true ]; then
+    edit_list
+fi
+if [ "$RUN_LIST" = true ]; then
+    process_list $LIST_FUNCS
+fi
 
 if [ "$SELECTED_PRESET" = "default" ] && [ ! -s "$ACTIVE_PRESET" ]; then
     log_info "${YELLOW}[Warning] Using 'default' preset, but it is currently empty.${NC}"
