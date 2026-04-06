@@ -68,8 +68,11 @@ forb [options] [target] [-f <files...>]
 | **General** | `<target>` | Executable or library (`.a`, `.o`) to analyze |
 | | `-h, --help` | Show help message |
 | | `--json` | JSON output for CI/CD automations |
+| | `--html` | Generate a beautiful interactive HTML report |
+| | `--log` | Generate a `.log` of the output |
+| | `-oh, --open-html`| Open the folder containing HTML reports |
 | | `-l, --list [<funcs...>]` | Show default authorized list or check specific functions |
-| | `-e` | Open the default authorized functions list for editing |
+| | `-e, --edit` | Open the default authorized functions list for editing |
 | **Presets** | `-P, --preset` | Load the preset matching the target name |
 | | `-np, --no-preset` | Disable auto-preset, force default list |
 | | `-gp, --get-presets` | Restore default presets from GitHub |
@@ -82,7 +85,7 @@ forb [options] [target] [-f <files...>]
 | | `-v` | Verbose: show source code context with highlighting |
 | | `-f <files...>` | Limit scan to specific files |
 | | `-p, --full-path` | Show full file paths |
-| | `-a` | Show authorized functions during the scan |
+| | `-a, --all` | Show all authorized functions during the scan |
 | | `--no-auto` | Disable auto-detection (must be placed before `-s`) |
 | **Library Filters** | `-mlx` | Ignore MiniLibX internal calls |
 | | `-lm` | Ignore Math library internal calls |
@@ -122,6 +125,12 @@ forb -l read write malloc free
 
 # JSON output for automation
 forb --json minishell
+
+# Export an Interactive Web Report instead of terminal UI
+forb --html minishell
+
+# Open the HTML reports generated so far
+forb -oh
 
 # Show execution time
 forb -t minishell
