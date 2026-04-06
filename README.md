@@ -43,15 +43,10 @@ ForbCheck uses two complementary approaches:
 
 ---
 
-## Installation Linux
+## Installation Linux (MacOS beta)
 
 ```bash
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Mrdolls/forb/refs/heads/main/install.sh)"
-```
-## Installation MacOs (Beta)
-
-```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Mrdolls/forbCheck/refs/heads/main/install_macOS-beta.sh)"
 ```
 
 ---
