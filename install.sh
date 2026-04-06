@@ -23,6 +23,7 @@ log_action "Fetching core files from GitHub..."
 curl -sfL "$REPO_RAW_URL/forb.sh" -o "$INSTALL_DIR/forb.sh" >> "$LOG_FILE" 2>&1
 curl -sfL "$REPO_RAW_URL/forb_completion.sh" -o "$INSTALL_DIR/forb_completion.sh" >> "$LOG_FILE" 2>&1
 curl -sfL "$REPO_RAW_URL/html_generator.sh" -o "$INSTALL_DIR/html_generator.sh" >> "$LOG_FILE" 2>&1
+curl -sfL "$REPO_RAW_URL/doc_fr.md" -o "$INSTALL_DIR/doc_fr.md" >> "$LOG_FILE" 2>&1
 
 if [ ! -s "$INSTALL_DIR/forb.sh" ]; then
     echo -e "${RED}Error: Could not download forb.sh. Check your internet connection.${NC}"
