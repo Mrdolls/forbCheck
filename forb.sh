@@ -11,16 +11,17 @@ else
 fi
 
 # Constants
-readonly VERSION="1.10.0"
-readonly INSTALL_DIR="$HOME/.forb-beta"
-readonly LOG_DIR="$HOME/.forb-beta/logs"
+readonly VERSION="1.12.0"
+readonly INSTALL_DIR="$HOME/.forb"
+readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
-readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/main/forb-beta.sh"
+readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/refs/heads/main/install.sh"
 
 # Global State Variables (Mutable)
 ACTIVE_PRESET="$PRESET_DIR/default.preset"
 LOG_FILE=""
 USE_JSON=false
+USE_HTML=false
 USE_PRESET=0
 SHOW_ALL=false
 USE_MLX=false
@@ -36,6 +37,20 @@ DISABLE_PRESET=false
 SET_WARNING=false
 PUT_LOG=false
 
+SHOW_HELP=false
+SHOW_VERSION=false
+DO_UPDATE=false
+DO_REMOVE=false
+DO_GET_PRESETS=false
+DO_LIST_PRESETS=false
+DO_OPEN_PRESETS=false
+DO_OPEN_HTML=false
+DO_CREATE_PRESET=false
+DO_REMOVE_PRESET=false
+DO_EDIT_LIST=false
+RUN_LIST=false
+LIST_FUNCS=""
+
 # Détection OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
     readonly IS_MAC=true
@@ -43,6 +58,8 @@ else
     readonly IS_MAC=false
 fi
 
+# Load external modules
+[ -f "$INSTALL_DIR/html_generator.sh" ] && source "$INSTALL_DIR/html_generator.sh"
 
 # ==============================================================================
 #  SECTION 2: UTILITY FUNCTIONS (Low-level helpers)
@@ -58,7 +75,7 @@ safe_exit() {
 }
 
 log_info() {
-    if [ "$USE_JSON" = false ]; then
+    if [ "$USE_JSON" != true ] && [ "$USE_HTML" != true ]; then
         if [ "$PUT_LOG" = true ] && [ -n "$LOG_FILE" ]; then
             echo -e "$@" | sed 's/\x1b\[[0-9;]*m//g' >> "$LOG_FILE"
         else
@@ -166,9 +183,16 @@ generate_json_output() {
     echo "}"
 }
 
+
+
 open_editor() {
     local target_file="$1"
-    command -v code &>/dev/null && code --wait "$target_file" || vim "$target_file" || nano "$target_file"
+
+    if command -v code &>/dev/null; then
+        code -r "$target_file"
+    else
+        vim "$target_file" || nano "$target_file"
+    fi
 }
 
 # ==============================================================================
@@ -185,22 +209,26 @@ prompt_preset_menu() {
     fi
 
     local presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
-    exec 3<&0
-    exec 0</dev/tty
+    if [ -t 0 ] || [ -c /dev/tty ]; then
+        exec 3<&0
+        exec 0</dev/tty
 
-    PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
-    select choice in "${presets[@]}"; do
-        if [ -n "$choice" ]; then
-            export SELECTED_PRESET="$choice"
-            log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
-            break
-        else
-            log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
-        fi
-    done
-
-    exec 0<&3
-    exec 3<&-
+        PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
+        select choice in "${presets[@]}"; do
+            if [ -n "$choice" ]; then
+                export SELECTED_PRESET="$choice"
+                log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
+                break
+            else
+                log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
+            fi
+        done
+        exec 0<&3
+        exec 3<&-
+    else
+        log_info "${RED}Error: Non-interactive environment detected. Please explicitly provide a preset (e.g., using -P or matching folder name).${NC}"
+        safe_exit 1
+    fi
 
     if [ -z "$SELECTED_PRESET" ]; then
          log_info "${RED}Error: Preset selection aborted.${NC}"
@@ -215,7 +243,7 @@ auto_find_preset() {
     for preset_file in "$PRESET_DIR"/*.preset; do
         [ -e "$preset_file" ] || continue
         base_name=$(basename "$preset_file" .preset)
-        base_name_lower=$(log_info "$base_name" | tr '[:upper:]' '[:lower:]')
+        base_name_lower=$(echo "$base_name" | tr '[:upper:]' '[:lower:]')
 
         if [[ "$target_name_lower" == *"$base_name_lower"* ]]; then
             export SELECTED_PRESET="$base_name"
@@ -245,20 +273,38 @@ resolve_preset() {
     project_name=$([ -n "$TARGET" ] && basename "$TARGET" || basename "$PWD")
 
     if [ "$USE_PRESET" -eq 1 ]; then
-        export SELECTED_PRESET="$project_name"
+     prompt_preset_menu
         return 0
     fi
-    if [ "$DISABLE_AUTO" = "true" ] && [ "$USE_JSON" = true ]; then
+    if [ "$DISABLE_AUTO" = "true" ] && { [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ]; }; then
         export SELECTED_PRESET="default"
         return 0
     fi
+
+    if [ -z "$SELECTED_PRESET" ] && [ -n "$project_name" ]; then
+        if [ -f "$PRESET_DIR/${project_name}.preset" ]; then
+            export SELECTED_PRESET="$project_name"
+            [ "$DISABLE_AUTO" != "true" ] && log_info "${CYAN}[Auto-Detect] Preset : ${BOLD}${project_name}${NC} (Exact match)"
+            return 0
+        fi
+    fi
+
     if [ "$DISABLE_AUTO" != "true" ] && [ -z "$SELECTED_PRESET" ]; then
         project_name_lower=$(echo "$project_name" | tr '[:upper:]' '[:lower:]')
         auto_find_preset "$project_name_lower"
     fi
     [ -n "$SELECTED_PRESET" ] && return 0
 
-    if [ "$USE_JSON" = true ] || [ "$mode" == "binary" ]; then
+    if [ "$DO_EDIT_LIST" = true ]; then
+        prompt_preset_menu
+        return 0
+    fi
+    if [ "$RUN_LIST" = true ]; then
+        export SELECTED_PRESET="default"
+        return 0
+    fi
+
+    if [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ] || [ "$mode" == "binary" ]; then
         export SELECTED_PRESET="default"
         return 0
     fi
@@ -362,6 +408,24 @@ open_presets() {
         open "$PRESET_DIR"
     else
         log_info "\033[31mError: Could not open the folder automatically. You can find it at: $PRESET_DIR\033[0m"
+    fi
+    safe_exit 0
+}
+
+open_html() {
+    local html_dir="$INSTALL_DIR/reports_html"
+    mkdir -p "$html_dir"
+
+    log_info "\033[32mOpening HTML reports directory: $html_dir\033[0m"
+
+    if command -v explorer.exe > /dev/null; then
+        (cd "$html_dir" && explorer.exe .)
+    elif command -v xdg-open > /dev/null; then
+        xdg-open "$html_dir"
+    elif command -v open > /dev/null; then
+        open "$html_dir"
+    else
+        log_info "\033[31mError: Could not open the folder automatically. You can find it at: $html_dir\033[0m"
     fi
     safe_exit 0
 }
@@ -470,16 +534,33 @@ show_list() {
         shift
         log_info "${BLUE}${BOLD}Checking functions:${NC}"
         for f in "$@"; do
-            if grep -qFx "$f" <<< "$AUTH_FUNCS"; then
-                log_info "   [${GREEN}OK${NC}] -> $f"
+            local is_listed=false
+            grep -qFx "$f" <<< "$AUTH_FUNCS" && is_listed=true
+            if [ "$BLACKLIST_MODE" = true ]; then
+                if [ "$is_listed" = true ]; then
+                    log_info "   [${RED}KO${NC}] -> $f (Blacklisted)"
+                else
+                    log_info "   [${GREEN}OK${NC}] -> $f"
+                fi
             else
-                log_info "   [${RED}KO${NC}] -> $f"
+                if [ "$is_listed" = true ]; then
+                    log_info "   [${GREEN}OK${NC}] -> $f"
+                else
+                    log_info "   [${RED}KO${NC}] -> $f"
+                fi
             fi
         done
     else
-        log_info "${BLUE}${BOLD}Authorized functions (Default):${NC} ${CYAN}(Use -e to edit)${NC}"
+        local mode_text="Whitelist"
+        [ "$BLACKLIST_MODE" = true ] && mode_text="Blacklist"
+
+        log_info "${BLUE}${BOLD}Listed functions ($mode_text):${NC} ${CYAN}(Use -e to edit)${NC}"
         log_info "---------------------------------------"
-        tr ',' '\n' < "$ACTIVE_PRESET" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' | column
+        if [ -n "$AUTH_FUNCS" ]; then
+            echo "$AUTH_FUNCS" | column
+        else
+            log_info "${YELLOW}(List is empty)${NC}"
+        fi
     fi
 
     [ "$should_exit" -eq 1 ] && safe_exit 0
@@ -492,27 +573,21 @@ process_list() {
         check_args+="$1 "
         shift
     done
-
-    if [ ! -f "$ACTIVE_PRESET" ]; then
-        mkdir -p "$(dirname "$ACTIVE_PRESET")"
-        touch "$ACTIVE_PRESET"
-    fi
+    resolve_preset "list"
+    load_preset "$SELECTED_PRESET"
 
     if [ -L "$ACTIVE_PRESET" ]; then
-        echo "Error: ACTIVE_PRESET
-     must be a regular file, not a symlink"
+        echo "Error: ACTIVE_PRESET must be a regular file, not a symlink"
         safe_exit 1
     fi
 
     if [ -f "$ACTIVE_PRESET" ]; then
-        AUTH_FUNCS_ARR=()
-        while IFS= read -r line; do
-             AUTH_FUNCS_ARR+=("$line")
-        done < <(tr ',' '\n' < "$ACTIVE_PRESET" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$')
+        local raw_preset=$(cat "$ACTIVE_PRESET" 2>/dev/null)
+        parse_preset_flags "$raw_preset"
     fi
+
     show_list 1 $check_args
 }
-
 
 # ==============================================================================
 #  SECTION 4: CORE ENGINE - SCAN & DETECT
@@ -648,25 +723,34 @@ scan_source_engine() {
     local user_funcs="$2"
 
     export USE_JSON
+    export USE_HTML
     export BLACKLIST_MODE
+    export VERBOSE
+    export SHOW_ALL
+    export USER_FUNCS="$user_funcs"
 
     if [ "$BLACKLIST_MODE" = true ]; then
         export BLACKLIST_FUNCS=$(echo "$AUTH_FUNCS" | tr '\n' ' ')
     else
         local keywords="if while for return sizeof switch else case default do static const volatile struct union enum typedef extern inline unsigned signed short long int char float double void bool va_arg va_start va_end va_list NULL del f"
         local macros="WIFEXITED WEXITSTATUS WIFSIGNALED WTERMSIG S_ISDIR S_ISREG"
+        export KEYWORDS_MACROS="$keywords $macros"
         export ALLOW_MLX=0
         [ "$USE_MLX" = true ] && export ALLOW_MLX=1
-        export WHITELIST="$(echo "$AUTH_FUNCS" | tr '\n' ' ') $user_funcs $keywords $macros"
+        export WHITELIST="$(echo "$AUTH_FUNCS" | tr '\n' ' ')"
     fi
 
     echo "$files" | tr '\n' '\0' | xargs -0 perl -0777 -e '
         my $is_blacklist = ($ENV{BLACKLIST_MODE} eq "true");
         my %forbidden = map { $_ => 1 } split(" ", $ENV{BLACKLIST_FUNCS} || "");
         my %safe = map { $_ => 1 } split(" ", $ENV{WHITELIST} || "");
+        my %user_defined = map { $_ => 1 } split(" ", $ENV{USER_FUNCS} || "");
         my $allow_mlx = $ENV{ALLOW_MLX} || 0;
         my $count = 0;
-        my $json_mode = $ENV{USE_JSON};
+        my $json_mode = ($ENV{USE_JSON} eq "true" || $ENV{USE_HTML} eq "true") ? "true" : "false";
+        my $show_all = ($ENV{SHOW_ALL} eq "true");
+        my %kw_macros = map { $_ => 1 } split(" ", $ENV{KEYWORDS_MACROS} || "");
+        my %authorized_found = ();
 
         foreach my $file (@ARGV) {
             # En whitelist, on passe les fichiers MLX si autorisé
@@ -677,12 +761,14 @@ scan_source_engine() {
             open(my $fh, "<", $file) or next;
             my $content = do { local $/; <$fh> };
             close($fh);
+            my @orig_lines = split(/\n/, $content);
 
             # --- LE BOUCLIER ANTI-QUOTES ET COMMENTAIRES (Factorisé !) ---
             $content =~ s{(/\*.*?\*/)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
             $content =~ s{//.*}{}g;
             $content =~ s{("(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
 
+            my $verbose = ($ENV{VERBOSE} // "") eq "true";
             my @lines = split(/\n/, $content);
             for (my $i = 0; $i < @lines; $i++) {
                 my $line = $lines[$i];
@@ -692,13 +778,24 @@ scan_source_engine() {
                     my $is_illegal = 0;
 
                     # Logique de détection unifiée
+                    if (length($fname) <= 2 || $kw_macros{$fname} || $user_defined{$fname}) {
+                        next;
+                    }
+
                     if ($is_blacklist) {
-                        $is_illegal = 1 if $forbidden{$fname};
+                        if ($forbidden{$fname}) {
+                            $is_illegal = 1;
+                        } else {
+                            $authorized_found{$fname} = 1;
+                            next;
+                        }
                     } else {
-                        next if length($fname) <= 2;
-                        next if $safe{$fname};
-                        next if ($allow_mlx == 1 && $fname =~ /^mlx_/);
-                        $is_illegal = 1;
+                        if ($safe{$fname} || ($allow_mlx == 1 && $fname =~ /^mlx_/)) {
+                            $authorized_found{$fname} = 1;
+                            next;
+                        } else {
+                            $is_illegal = 1;
+                        }
                     }
 
                     # Formatage de la sortie
@@ -706,7 +803,13 @@ scan_source_engine() {
                         my $clean_file = $file;
                         $clean_file =~ s|^\./||;
                         if ($json_mode ne "true") {
-                            printf "  \033[31m[FORBIDDEN]\033[0m -> \033[1m%-15s\033[0m in \033[34m%s:%d\033[0m\n", $fname, $clean_file, $i + 1;
+                            printf "   \033[31m[FORBIDDEN]\033[0m -> \033[1m%s\033[0m\n", $fname;
+                            printf "          \033[33m\xe2\x86\xb3 Location: \033[34m%s:%d\033[0m\n", $clean_file, $i + 1;
+                            if ($verbose) {
+                                my $snippet = $orig_lines[$i] // "";
+                                $snippet =~ s/^\s+//;
+                                printf "          \033[33m\xe2\x86\xb3 Code:     \033[36m%s\033[0m\n", $snippet;
+                            }
                         } else {
                             my $lnum = $i + 1;
                             print "MATCH|-> $fname|in $clean_file:$lnum\n";
@@ -719,20 +822,41 @@ scan_source_engine() {
 
         # Message de fin
         if ($json_mode ne "true") {
+            if ($show_all) {
+                foreach my $func (sort keys %authorized_found) {
+                    printf "   [\033[32mOK\033[0m]         -> %s\n", $func;
+                }
+            }
+            print "\n-------------------------------------------------\n";
             if ($count == 0) {
-                print "  \033[32m[OK]\033[0m No unauthorized functions detected.\n";
+                print "\t\t\033[32mRESULT: PERFECT\033[0m\n";
             } else {
-                print "\n  \033[0;31m[!] Total: $count infraction(s) detected.\033[0m\n";
+                printf "\033[31mTotal forbidden functions found: %d\033[0m\n\n", $count;
+                print "\t\t\033[31mRESULT: FAILURE\033[0m\n";
             }
         }
     '
 }
 
 source_scan() {
+    local _src_start
+    if [ "$IS_MAC" = true ]; then
+        _src_start=$(perl -MTime::HiRes=time -e 'print time')
+    else
+        _src_start=$(date +%s.%N)
+    fi
     resolve_preset "source"
     load_preset "$SELECTED_PRESET" || { log_info "${RED}Error: Preset not found.${NC}"; exit 1; }
 
-    local files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+    local files_list=""
+    if [ -n "$SPECIFIC_FILES" ]; then
+        for f in $SPECIFIC_FILES; do
+            [ -f "$f" ] && files_list+="$f"$'\n'
+        done
+        files_list=$(echo "$files_list" | sed '/^$/d')
+    else
+        files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+    fi
     [ -z "$files_list" ] && safe_exit 1
     local nb_files=$(echo "$files_list" | grep -c '^')
     [ "$nb_files" -eq 0 ] && safe_exit 1
@@ -740,21 +864,44 @@ source_scan() {
     local raw_preset=$(cat "$ACTIVE_PRESET" 2>/dev/null)
     parse_preset_flags "$raw_preset"
 
-    log_info "${BLUE}Scanning $nb_files source files...${NC}\n"
+    local preset_mode="Whitelist"
+    [ "$BLACKLIST_MODE" = true ] && preset_mode="Blacklist"
+
+    log_info "${BLUE}Scan Mode  :${NC} ${YELLOW}Source${NC} (*.c / *.cpp)"
+    log_info "${BLUE}Preset     :${NC} ${BOLD}${SELECTED_PRESET}${NC} ${CYAN}(${preset_mode})${NC}"
+    [ -n "$SPECIFIC_FILES" ] && log_info "${BLUE}Scope      :${NC} $SPECIFIC_FILES"
+    log_info ""
+    log_info "${BLUE}${BOLD}Execution:${NC}"
+    log_info "-------------------------------------------------"
+    log_info "${BLUE}Scanning $nb_files source file(s)...${NC}\n"
 
     local my_funcs=$(get_user_defined_funcs)
     local scan_output
     scan_output=$(scan_source_engine "$files_list" "$my_funcs")
 
-    if [ "$USE_JSON" = true ]; then
+    if [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ]; then
         export JSON_RAW_DATA="$scan_output"
         export IS_SOURCE_SCAN=true
-        generate_json_output
+        if [ "$USE_JSON" = true ]; then
+            generate_json_output
+        else
+            generate_html_report
+        fi
     else
         while IFS= read -r line; do
             log_info "$line"
         done <<< "$scan_output"
-
+        if [ "$SHOW_TIME" = true ]; then
+            local _end_t
+            if [ "$IS_MAC" = true ]; then
+                _end_t=$(perl -MTime::HiRes=time -e 'print time')
+            else
+                _end_t=$(date +%s.%N)
+            fi
+            local _dur=$(echo "$_end_t - $_src_start" | bc 2>/dev/null || echo "0")
+            [[ "$_dur" == .* ]] && _dur="0${_dur}"
+            log_info "$_dur"
+        fi
         log_info "\n${GREEN}Source audit complete.${NC}"
     fi
     safe_exit 0
@@ -875,8 +1022,12 @@ run_analysis() {
         count=$(echo "$forbidden_list" | wc -w)
     fi
 
-    if [ "$USE_JSON" = true ]; then
-        generate_json_output "$count"
+    if [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ]; then
+        if [ "$USE_JSON" = true ]; then
+            generate_json_output "$count"
+        else
+            generate_html_report "$count"
+        fi
         [ $count -eq 0 ] && return 0 || return 1
     else
         print_analysis_report
@@ -948,6 +1099,9 @@ show_help() {
     echo -e "\n${BOLD}General:${NC}"
     printf "  %-24s %s\n" "-h, --help" "Show help message"
     printf "  %-24s %s\n" "--json" "Generate a JSON output for automations"
+    printf "  %-24s %s\n" "--html" "Generate a beautiful interactive HTML report"
+    printf "  %-24s %s\n" "-oh, --open-html" "Open the folder containing HTML reports"
+    printf "  %-24s %s\n" "--log" "Generate a .log of the output"
     printf "  %-24s %s\n" "-l, --list [<funcs...>]" "Show list or check specific functions"
     printf "  %-24s %s\n" "-e, --edit" "Edit authorized list"
 
@@ -969,7 +1123,7 @@ show_help() {
     printf "  %-24s %s\n" "--no-auto" "Disable auto-detection (must be used BEFORE -s)"
 
     echo -e "\n${BOLD}Deep Scan:${NC}"
-    printf "  %-24s %s\n" "-s, --source" "Scan source files for unauthorized C functions (use after --no-auto to force menu)"
+    printf "  %-24s %s\n" "-s, --source" "Scan source files for unauthorized C functions"
 
     echo -e "\n${BOLD}Library Filters:${NC}"
     printf "  %-24s %s\n" "-mlx" "Ignore MiniLibX internal calls"
@@ -1037,7 +1191,7 @@ update_script() {
 
 auto_check_update() {
     # Skip interactive update check if running in JSON mode (prevents CI hangs)
-    [ "$USE_JSON" = true ] && return
+    [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ] && return
 
     local remote_version choice
 
@@ -1062,32 +1216,32 @@ auto_check_update() {
 
 uninstall_script() {
     local choice
-    echo -ne "${RED}${BOLD}Warning: You are about to uninstall ForbCheck-Beta. All configurations will be lost. Continue? (y/n): ${NC}"
+    echo -ne "${RED}${BOLD}Warning: You are about to uninstall ForbCheck. All configurations will be lost. Continue? (y/n): ${NC}"
     read -r choice
     case "$choice" in
         [yY][eE][sS]|[yY])
-            log_info "${YELLOW}Uninstalling ForbCheck-Beta...${NC}"
+            log_info "${YELLOW}Uninstalling ForbCheck...${NC}"
 
-            rm -f "$HOME/.local/bin/forb-beta"
+            rm -f "$HOME/.local/bin/forb"
 
             if [ "$IS_MAC" = true ]; then
-                sed -i '' '/alias forb-beta=/d' ~/.zshrc ~/.bashrc 2>/dev/null
-                sed -i '' '/# Autocompletion & ForbCheck/,/source ~\/.forb-beta\/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
-                sed -i '' '/# ForbCheck-Beta Autocompletion/d' ~/.zshrc ~/.bashrc 2>/dev/null
-                sed -i '' '/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/alias forb=/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/# Autocompletion & ForbCheck/,/source ~\/.forb\/forb_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/# ForbCheck Autocompletion/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '' '/forb_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
                 sed -i '' '/autoload -U +X compinit && compinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
                 sed -i '' '/autoload -U +X bashcompinit && bashcompinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
             else
-                sed -i '/alias forb-beta=/d' ~/.zshrc ~/.bashrc 2>/dev/null
-                sed -i '/# Autocompletion & ForbCheck/,/source ~\/.forb-beta\/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
-                sed -i '/# ForbCheck-Beta Autocompletion/d' ~/.zshrc ~/.bashrc 2>/dev/null
-                sed -i '/forb-beta_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/alias forb=/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/# Autocompletion & ForbCheck/,/source ~\/.forb\/forb_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/# ForbCheck Autocompletion/d' ~/.zshrc ~/.bashrc 2>/dev/null
+                sed -i '/forb_completion\.sh/d' ~/.zshrc ~/.bashrc 2>/dev/null
                 sed -i '/autoload -U +X compinit && compinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
                 sed -i '/autoload -U +X bashcompinit && bashcompinit/d' ~/.zshrc ~/.bashrc 2>/dev/null
             fi
-            rm -rf "$HOME/.forb-beta"
+            rm -rf "$HOME/.forb"
 
-            log_info "${GREEN}[✔] ForbCheck-Beta has been successfully removed.${NC}"
+            log_info "${GREEN}[✔] ForbCheck has been successfully removed.${NC}"
             echo -e "${YELLOW}Note: Run 'exec zsh' to refresh your shell.${NC}"
             safe_exit 0
             ;;
@@ -1127,13 +1281,21 @@ check_dependencies() {
 # 1. Pre-process arguments (handle split/combined flags)
 args=()
 for arg in "$@"; do
-    if [[ "$arg" =~ ^-(mlx|lm|up|op|lp|cp|rp|gp|np)$ ]]; then
+    if [[ "$arg" =~ ^-(mlx|lm|up|op|lp|cp|rp|gp|np|oh)$ ]]; then
         args+=("$arg")
     elif [[ "$arg" == "--"* ]]; then
         args+=("$arg")
     elif [[ "$arg" =~ ^-[a-zA-Z]{2,}$ ]]; then
-        for (( i=1; i<${#arg}; i++ )); do
-            args+=("-${arg:$i:1}")
+        _i=1
+        while (( _i < ${#arg} )); do
+            _two="${arg:$_i:2}"
+            if [[ "$_two" =~ ^(np|lm|up|op|lp|cp|rp|gp|mlx|oh)$ ]]; then
+                args+=("-$_two")
+                _i=$(( _i + 2 ))
+            else
+                args+=("-${arg:$_i:1}")
+                _i=$(( _i + 1 ))
+            fi
         done
     else
         args+=("$arg")
@@ -1144,29 +1306,38 @@ set -- "${args[@]}"
 # 2. Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -h|--help) show_help ;;
-        --version) log_info "V$VERSION"; safe_exit 0;;
+        -h|--help) SHOW_HELP=true; shift ;;
+        --version) SHOW_VERSION=true; shift ;;
         --json) USE_JSON=true; shift ;;
-        --log) PUT_LOG=true; shift;;
-        -up|--update) update_script ;;
-        --remove) uninstall_script ;;
+        --html) USE_HTML=true; shift ;;
+        --log) PUT_LOG=true; shift ;;
+        -up|--update) DO_UPDATE=true; shift ;;
+        --remove) DO_REMOVE=true; shift ;;
         --no-auto) DISABLE_AUTO=true; shift ;;
         -b|--blacklist) export BLACKLIST_MODE=true; shift ;;
-        -s|--scan-source) FORCE_SOURCE_SCAN=true; shift ;;
-        -v) VERBOSE=true; shift ;;
+        -s|--source) FORCE_SOURCE_SCAN=true; shift ;;
+        -v|--verbose) VERBOSE=true; shift ;;
         -p|--full-path) FULL_PATH=true; shift ;;
-        -a) SHOW_ALL=true; shift ;;
+        -a|--all) SHOW_ALL=true; shift ;;
         -mlx) USE_MLX=true; shift ;;
         -lm) USE_MATH=true; shift ;;
         --preset|-P) USE_PRESET=1; shift ;;
         -np|--no-preset) DISABLE_PRESET=true; shift ;;
-        -gp|--get-presets) get_presets "manual";;
-        -lp|--list-presets) list_presets ;;
-        -op|--open-presets) open_presets ;;
-        -cp|--create-presets) create_preset ;;
-        -rp|--remove-preset) remove_preset ;;
-        -e) edit_list ;;
-        -l|--list) shift; process_list "$@" ;;
+        -gp|--get-presets) DO_GET_PRESETS=true; shift ;;
+        -lp|--list-presets) DO_LIST_PRESETS=true; shift ;;
+        -op|--open-presets) DO_OPEN_PRESETS=true; shift ;;
+        -oh|--open-html) DO_OPEN_HTML=true; shift ;;
+        -cp|--create-preset) DO_CREATE_PRESET=true; shift ;;
+        -rp|--remove-preset) DO_REMOVE_PRESET=true; shift ;;
+        -e|--edit) DO_EDIT_LIST=true; shift ;;
+        -l|--list)
+            RUN_LIST=true; shift
+            while [[ $# -gt 0 && ! "$1" =~ ^- && ! -f "$1" && "$1" != "$TARGET" ]]; do
+                LIST_FUNCS+="$1 "
+                shift
+            done
+            continue
+            ;;
         -t|--time) SHOW_TIME=true; shift ;;
         -f)
             shift
@@ -1181,10 +1352,23 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [ "$SHOW_HELP" = true ]; then show_help; fi
+if [ "$SHOW_VERSION" = true ]; then log_info "V$VERSION"; safe_exit 0; fi
+if [ "$DO_UPDATE" = true ]; then update_script; fi
+if [ "$DO_REMOVE" = true ]; then uninstall_script; fi
+if [ "$DO_GET_PRESETS" = true ]; then get_presets "manual"; fi
+if [ "$DO_LIST_PRESETS" = true ]; then list_presets; fi
+if [ "$DO_OPEN_PRESETS" = true ]; then open_presets; fi
+if [ "$DO_OPEN_HTML" = true ]; then open_html; fi
+if [ "$DO_CREATE_PRESET" = true ]; then create_preset; fi
+if [ "$DO_REMOVE_PRESET" = true ]; then remove_preset; fi
+
 # logs
 if [ "$PUT_LOG" = true ]; then
     mkdir -p "$LOG_DIR"
-    echo -e "${CYAN}The program is running and logging its output...${RED}"
+    if [ "$USE_JSON" != true ] && [ "$USE_HTML" != true ]; then
+        echo -e "${CYAN}The program is running and logging its output...${RED}"
+    fi
     count=$(ls -1 "$LOG_DIR"/*.log 2>/dev/null | wc -l)
     new_num=$((count + 1))
     timestamp=$(date +"%Y-%m-%d_%Hh%M")
@@ -1199,27 +1383,37 @@ log_info "${YELLOW}╔═══════════════════�
 log_info "${YELLOW}║              ForbCheck              ║${NC}"
 log_info "${YELLOW}╚═════════════════════════════════════╝${NC}"
 
-# 4. Target Validation & Fallback
 if [ "$FORCE_SOURCE_SCAN" = true ]; then
     source_scan
 fi
 
 if [ -z "$TARGET" ]; then
     if [ "$DISABLE_AUTO" = true ]; then
-        if [ "$USE_JSON" = true ]; then
+        if [ "$DO_EDIT_LIST" = true ] || [ "$RUN_LIST" = true ]; then
+            :
+        elif [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ]; then
              echo "{\"target\":\"\",\"version\":\"$VERSION\",\"error\":\"No target specified and auto-detection is disabled.\",\"status\":\"FAILURE\"}"
+             safe_exit 1
         else
              log_info "${RED}Error: No target specified and auto-detection is disabled (--no-auto).${NC}"
              log_info "${CYAN}Usage: forb --no-auto <binary_name>  OR  forb --no-auto -s${NC}"
+             safe_exit 1
         fi
-        safe_exit 1
     elif ! auto_detect_target; then
-        log_info "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
-        source_scan
+        if [ "$DO_EDIT_LIST" = true ] || [ "$RUN_LIST" = true ]; then
+            :
+        else
+            log_info "${RED}[Auto-Detect] No binary found.${YELLOW} -> Falling back to Source Scan...${NC}\n"
+            source_scan
+        fi
     fi
 elif [ ! -f "$TARGET" ]; then
-    log_info "${YELLOW}[Warning] Target '$TARGET' not found. Falling back to Source Scan...${NC}\n"
-    source_scan
+    if [ "$DO_EDIT_LIST" = true ] || [ "$RUN_LIST" = true ]; then
+        :
+    else
+        log_info "${YELLOW}[Warning] Target '$TARGET' not found. Falling back to Source Scan...${NC}\n"
+        source_scan
+    fi
 fi
 
 # 5. Pre-run Setup (Updates, Cache, Libraries)
@@ -1231,6 +1425,13 @@ auto_detect_libraries
 resolve_preset "binary"
 load_preset "$SELECTED_PRESET"
 
+if [ "$DO_EDIT_LIST" = true ]; then
+    edit_list
+fi
+if [ "$RUN_LIST" = true ]; then
+    process_list $LIST_FUNCS
+fi
+
 if [ "$SELECTED_PRESET" = "default" ] && [ ! -s "$ACTIVE_PRESET" ]; then
     log_info "${YELLOW}[Warning] Using 'default' preset, but it is currently empty.${NC}"
 fi
@@ -1239,11 +1440,15 @@ RAW_PRESET=$(cat "$ACTIVE_PRESET" 2>/dev/null)
 parse_preset_flags "$RAW_PRESET"
 
 # 7. Print Execution Details
-if [ "$AUTO_BIN_DETECTED" != true ] && [ -n "$TARGET" ]; then
-    log_info "${BLUE}Target bin:${NC} $TARGET"
+if [ -n "$TARGET" ]; then
+    log_info "${BLUE}Scan Mode  :${NC} ${YELLOW}Binary${NC}"
+    [ "$AUTO_BIN_DETECTED" != true ] && log_info "${BLUE}Target bin :${NC} $TARGET"
 else
-    log_info ""
+    log_info "${BLUE}Scan Mode  :${NC} ${YELLOW}Binary${NC}"
 fi
+local_preset_mode="Whitelist"
+[ "$BLACKLIST_MODE" = true ] && local_preset_mode="Blacklist"
+log_info "${BLUE}Preset     :${NC} ${BOLD}${SELECTED_PRESET}${NC} ${CYAN}(${local_preset_mode})${NC}"
 
 if [ "$SET_WARNING" = true ]; then
     log_info "${YELLOW}Warning:${NC} Source content is newer than the binary."
