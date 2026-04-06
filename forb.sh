@@ -11,11 +11,11 @@ else
 fi
 
 # Constants
-readonly VERSION="1.12.0"
+readonly VERSION="1.12.1"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
-readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/refs/heads/main/install.sh"
+readonly UPDATE_URL="https://raw.githubusercontent.com/Mrdolls/forb/refs/heads/main/forb.sh"
 
 # Global State Variables (Mutable)
 ACTIVE_PRESET="$PRESET_DIR/default.preset"
@@ -1354,7 +1354,7 @@ done
 
 if [ "$SHOW_HELP" = true ]; then show_help; fi
 if [ "$SHOW_VERSION" = true ]; then log_info "V$VERSION"; safe_exit 0; fi
-if [ "$DO_UPDATE" = true ]; then update_script; fi
+if [ "$DO_UPDATE" = true ]; then update_script; safe_exit 0; fi
 if [ "$DO_REMOVE" = true ]; then uninstall_script; fi
 if [ "$DO_GET_PRESETS" = true ]; then get_presets "manual"; fi
 if [ "$DO_LIST_PRESETS" = true ]; then list_presets; fi
