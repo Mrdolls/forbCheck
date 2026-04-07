@@ -11,8 +11,8 @@ else
 fi
 
 # Constants
-VERSION="1.12.1" #For old version detect
-readonly VERSION="1.12.1"
+VERSION="1.12.2" #For old version detect
+readonly VERSION="1.12.2"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
@@ -1354,7 +1354,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$SHOW_HELP" = true ]; then show_help; fi
-if [ "$SHOW_VERSION" = true ]; then log_info "V$VERSION"; safe_exit 0; fi
+if [ "$SHOW_VERSION" = true ]; then log_info "v$VERSION"; safe_exit 0; fi
 if [ "$DO_UPDATE" = true ]; then update_script; safe_exit 0; fi
 if [ "$DO_REMOVE" = true ]; then uninstall_script; fi
 if [ "$DO_GET_PRESETS" = true ]; then get_presets "manual"; fi
