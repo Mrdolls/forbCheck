@@ -11,6 +11,7 @@ else
 fi
 
 # Constants
+VERSION="1.12.1" #For old version detect
 readonly VERSION="1.12.1"
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
