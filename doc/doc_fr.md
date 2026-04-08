@@ -1,6 +1,6 @@
 # DOCUMENTATION COMPLÈTE - ForbCheck (forb.sh)
 
-**Version :** 1.14.0
+**Version :** 1.14.1
 **Auteur :** Mrdolls
 **Date de mise à jour :** 2026-04-08
 **Repository :** https://github.com/Mrdolls/forbCheck
@@ -132,7 +132,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 **Exemple :**
 ```bash
 ./forb.sh --version
-# Output: V1.14.0
+# Output: V1.14.1
 ```
 
 ---
@@ -159,7 +159,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.14.0",
+  "version": "1.14.1",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [
@@ -225,6 +225,26 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 **Exemple :**
 ```bash
 ./forb.sh -oh
+```
+
+---
+
+#### `-ol` ou `--open-logs`
+
+**Syntaxe :**
+```bash
+./forb.sh -ol
+```
+
+**Description :** Ouvre instantanément le dossier hébergeant les fichiers logs générés via `--log`.
+
+**Comportement :**
+- Utilise la commande d'interface graphique universelle (`xdg-open`, `open` macOS ou `explorer.exe`).
+- Quitte immédiatement après ouverture du dossier.
+
+**Exemple :**
+```bash
+./forb.sh -ol
 ```
 
 ---
@@ -849,7 +869,7 @@ floor, ceil, round, trunc
 ./forb.sh --update
 # Output:
 # Checking for updates...
-# New version available: v1.14.0 (Current: v1.12.0)
+# New version available: v1.14.1 (Current: v1.12.0)
 # Update? (y/n): y
 # [✔] Update successful!
 ```
@@ -1268,4 +1288,4 @@ fi
 
 **Fin de la documentation**
 
-*Cette documentation est complète pour la version 1.14.0 de ForbCheck. Les futures versions peuvent introduire des changements.*
+*Cette documentation est complète pour la version 1.14.1 de ForbCheck. Les futures versions peuvent introduire des changements.*
