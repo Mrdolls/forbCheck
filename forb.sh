@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Constants
-VERSION="1.14.0" # Modular version
+VERSION="1.14.1" # Modular version
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
@@ -39,6 +39,7 @@ DO_GET_PRESETS=false
 DO_LIST_PRESETS=false
 DO_OPEN_PRESETS=false
 DO_OPEN_HTML=false
+DO_OPEN_LOGS=false
 DO_CREATE_PRESET=false
 DO_REMOVE_PRESET=false
 DO_EDIT_LIST=false
@@ -70,13 +71,13 @@ bootstrap_directories
 # 1. Pre-process arguments
 args=()
 for arg in "$@"; do
-    if [[ "$arg" =~ ^-(mlx|lm|up|op|lp|cp|rp|gp|np|oh)$ ]]; then args+=("$arg")
+    if [[ "$arg" =~ ^-(mlx|lm|up|op|lp|cp|rp|gp|np|oh|ol)$ ]]; then args+=("$arg")
     elif [[ "$arg" == "--"* ]]; then args+=("$arg")
     elif [[ "$arg" =~ ^-[a-zA-Z]{2,}$ ]]; then
         _i=1
         while (( _i < ${#arg} )); do
             _two="${arg:$_i:2}"
-            if [[ "$_two" =~ ^(np|lm|up|op|lp|cp|rp|gp|mlx|oh)$ ]]; then args+=("-$_two"); _i=$(( _i + 2 ))
+            if [[ "$_two" =~ ^(np|lm|up|op|lp|cp|rp|gp|mlx|oh|ol)$ ]]; then args+=("-$_two"); _i=$(( _i + 2 ))
             else args+=("-${arg:$_i:1}"); _i=$(( _i + 1 )); fi
         done
     else args+=("$arg"); fi
@@ -107,6 +108,7 @@ while [[ $# -gt 0 ]]; do
         -lp|--list-presets) DO_LIST_PRESETS=true; shift ;;
         -op|--open-presets) DO_OPEN_PRESETS=true; shift ;;
         -oh|--open-html) DO_OPEN_HTML=true; shift ;;
+        -ol|--open-logs) DO_OPEN_LOGS=true; shift ;;
         -cp|--create-preset) DO_CREATE_PRESET=true; shift ;;
         -rp|--remove-preset) DO_REMOVE_PRESET=true; shift ;;
         -e|--edit) DO_EDIT_LIST=true; shift ;;
@@ -139,6 +141,7 @@ if [ "$DO_GET_PRESETS" = true ]; then get_presets "manual"; fi
 if [ "$DO_LIST_PRESETS" = true ]; then list_presets; fi
 if [ "$DO_OPEN_PRESETS" = true ]; then open_presets; fi
 if [ "$DO_OPEN_HTML" = true ]; then open_html; fi
+if [ "$DO_OPEN_LOGS" = true ]; then open_logs; fi
 if [ "$DO_CREATE_PRESET" = true ]; then create_preset; fi
 if [ "$DO_REMOVE_PRESET" = true ]; then remove_preset; fi
 
