@@ -61,7 +61,7 @@ update_script() {
     local tmp=$(mktemp) remote_v
     log_info "${BLUE}[Update] Checking latest version at ${CYAN}$UPDATE_URL${NC}..."
     if curl -sL "$UPDATE_URL" -o "$tmp"; then
-        remote_v=$(grep "^readonly VERSION=" "$tmp" | cut -d'"' -f2)
+        remote_v=$(grep -E "^(readonly )?VERSION=" "$tmp" | cut -d'"' -f2)
         if [ -z "$remote_v" ]; then log_info "${RED}[Update] Error: Parse failure.${NC}"; rm -f "$tmp"; return 1; fi
         log_info "${BLUE}[Update] Current: $VERSION | Remote: $remote_v"
         if [ "$(version_to_int "$remote_v")" -gt "$(version_to_int "$VERSION")" ]; then
@@ -79,7 +79,7 @@ update_script() {
 
 auto_check_update() {
     [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ] && return
-    local remote_v=$(curl -s --max-time 1 "$UPDATE_URL" | grep "^readonly VERSION=" | head -n 1 | cut -d'"' -f2)
+    local remote_v=$(curl -s --max-time 1 "$UPDATE_URL" | grep -E "^(readonly )?VERSION=" | head -n 1 | cut -d'"' -f2)
     if [ -n "$remote_v" ] && [ "$(version_to_int "$remote_v")" -gt "$(version_to_int "$VERSION")" ]; then
         echo -ne "${YELLOW}New version (v${remote_v}) available! Update now? (y/n): ${NC}"; read -r choice
         case "$choice" in [yY][eE][sS]|[yY]) update_script ;; *) log_info "${BLUE}Update skipped.${NC}\n" ;; esac
