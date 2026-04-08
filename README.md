@@ -26,7 +26,8 @@ ForbCheck uses two complementary approaches:
 - Detects external libraries (MiniLibX, Math) and excludes their internal symbols automatically
 - Warns you if your source code is newer than your binary (stale binary detection)
 - **Blacklist Mode** — inverts the scan logic: all functions allowed except the ones you explicitly list
-- **Preset flags** — embed behavior directly inside `.preset` files (`BLACKLIST_MODE`, `ALL_MLX`, `ALL_MATH`)
+- **Macro Expansion Engine** — resolves complex/obfuscated C macros to detect forbidden calls hidden behind defines
+- **Modular Architecture** — fast and localized execution via standalone Shell/Perl modules
 - JSON output mode for CI/CD integration
 - Preset system to manage authorized function lists per project
 
@@ -71,6 +72,7 @@ forb [options] [target] [-f <files...>]
 | | `--html` | Generate a beautiful interactive HTML report |
 | | `--log` | Generate a `.log` of the output |
 | | `-oh, --open-html`| Open the folder containing HTML reports |
+| | `-ol, --open-logs`| Open the folder containing log files |
 | | `-l, --list [<funcs...>]` | Show default authorized list or check specific functions |
 | | `-e, --edit` | Open the default authorized functions list for editing |
 | **Presets** | `-P, --preset` | Load the preset matching the target name |
@@ -131,6 +133,9 @@ forb --html minishell
 
 # Open the HTML reports generated so far
 forb -oh
+
+# Open the logs directory
+forb -ol
 
 # Show execution time
 forb -t minishell
@@ -259,4 +264,4 @@ Open-source — intended for educational use.
 
 ## Author
 
-[Mrdolls](https://github.com/Mrdolls) — 2025
+[Mrdolls](https://github.com/Mrdolls) — 2026
