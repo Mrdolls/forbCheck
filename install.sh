@@ -56,6 +56,7 @@ echo -e "${GREEN}  All modules downloaded successfully!      ${NC}"
 # 4. Download Documentation
 log_action "Fetching documentation..."
 curl -sfL "$REPO_RAW_URL/doc/doc_fr.md" -o "$DOC_DIR/doc_fr.md" >> "$LOG_FILE" 2>&1
+curl -sfL "$REPO_RAW_URL/doc/doc_en.md" -o "$DOC_DIR/doc_en.md" >> "$LOG_FILE" 2>&1
 
 # 5. Setup Binary & Path
 ln -sf "$INSTALL_DIR/forb.sh" "$BIN_DIR/forb"
