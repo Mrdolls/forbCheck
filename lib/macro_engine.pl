@@ -10,10 +10,18 @@ my $funcs_str = shift // "";
 my $is_blacklist = shift // "false";
 my $json_mode = shift // "false";
 my $verbose = shift // "false";
+my $user_funcs_str = shift // "";
+my $kw_macros_str = shift // "";
 my $root_dir = dirname($target_file);
 
 my %func_map = map { $_ => 1 } split(" ", $funcs_str);
-my %keywords = map { $_ => 1 } qw(if while for return else switch case default do sizeof);
+my %user_defined = map { $_ => 1 } split(" ", $user_funcs_str);
+my %keywords = map { $_ => 1 } split(" ", $kw_macros_str // "");
+
+# Extra safety for standard keywords
+foreach my $k (qw(if while for return else switch case default do sizeof void int char float double long short unsigned signed static extern const volatile struct union enum typedef inline size_t ssize_t)) {
+    $keywords{$k} = 1;
+}
 my %macros;
 my %seen_files;
 
@@ -72,14 +80,18 @@ load_file_recursive($target_file);
 
 # 2. Global Expansion of Target File
 open(my $tfh, "<", $target_file) or die "Could not open $target_file: $!";
-my @orig_lines = <$tfh>;
-my $content = join("", @orig_lines);
+my $content = do { local $/; <$tfh> };
 close($tfh);
 
-$content =~ s/\\\n//g;
-$content =~ s#/\*.*?\*/##gs;
-$content =~ s#//.*##g;
-$content =~ s/"(?:[^"\\]|\\.)*"/"_STR_"/g;
+my @orig_lines = split(/\n/, $content, -1);
+
+# Protect #define lines from self-expansion during the process
+$content =~ s/^(\s*#\s*define\b)/__PROTECTED_DEF__/gm;
+
+$content =~ s/\\\n/ \n/g;
+$content =~ s{(/\*.*?\*/)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+$content =~ s{//.*}{}g;
+$content =~ s{("(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
 
 my $changed = 1;
 for (1..15) {
@@ -95,14 +107,24 @@ for (1..15) {
     last unless $changed;
 }
 
+# Restore #define lines
+$content =~ s/__PROTECTED_DEF__/#define/g;
+
 # 3. Final Universal Scan
-my @expanded_lines = split("\n", $content);
+my @expanded_lines = split(/\n/, $content, -1);
 my $count = 0;
 for (my $i=0; $i < @expanded_lines; $i++) {
-    my $line = $expanded_lines[$i];
-    while ($line =~ /\b(\w+)\s*\(/g) {
+    my $line = $expanded_lines[$i] // "";
+    my $orig = $orig_lines[$i] // "";
+    
+    # Skip lines that haven't changed during expansion - source_scan.pl already handled them
+    next if $line eq $orig;
+
+    while ($line =~ /\b(\w{2,})\s*\(/g) {
         my $func = $1;
-        next if $keywords{$func};
+        
+        # Keyword and internal symbol filtering
+        next if $keywords{$func} || $user_defined{$func} || $func =~ /^_(?:_|ITM|edata|end|bss)/;
         
         my $is_illegal = 0;
         if ($is_blacklist eq "true") {

@@ -12,6 +12,7 @@ my $allow_mlx = $ENV{ALLOW_MLX} || 0;
 my $count = 0;
 my $json_mode = ($ENV{USE_JSON} eq "true" || $ENV{USE_HTML} eq "true") ? "true" : "false";
 my $show_all = ($ENV{SHOW_ALL} eq "true");
+my $no_summary = ($ENV{NO_SUMMARY} eq "true");
 my %kw_macros = map { $_ => 1 } split(" ", $ENV{KEYWORDS_MACROS} || "");
 my %authorized_found = ();
 
@@ -81,17 +82,19 @@ foreach my $file (@ARGV) {
 }
 
 if ($json_mode ne "true") {
-    if ($show_all) {
+    if ($show_all && keys %authorized_found) {
         foreach my $func (sort keys %authorized_found) {
             printf "   [\033[32mOK\033[0m]         -> %s\n", $func;
         }
     }
-    print "\n-------------------------------------------------\n";
-    if ($count == 0) {
-        print "\t\t\033[32mRESULT: PERFECT\033[0m\n";
-    } else {
-        printf "\033[31mTotal forbidden functions found: %d\033[0m\n\n", $count;
-        print "\t\t\033[31mRESULT: FAILURE\033[0m\n";
+    if (!$no_summary) {
+        print "\n-------------------------------------------------\n";
+        if ($count == 0) {
+            print "\t\t\033[32mRESULT: PERFECT\033[0m\n";
+        } else {
+            printf "\033[31mTotal forbidden functions found: %d\033[0m\n\n", $count;
+            print "\t\t\033[31mRESULT: FAILURE\033[0m\n";
+        }
     }
 }
 exit($count > 0 ? 1 : 0);

@@ -1,6 +1,6 @@
 # COMPLETE DOCUMENTATION - ForbCheck (forb.sh)
 
-**Version:** 1.14.4
+**Version:** 1.14.5
 **Author:** Mrdolls
 **Update Date:** 2026-04-08
 **Repository:** https://github.com/Mrdolls/forbCheck
@@ -125,14 +125,14 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 **Description:** Displays the ForbCheck version number.
 
 **Behavior:**
-- Displays the version in `V1.14.4` format
+- Displays the version in `V1.14.5` format
 - Exits immediately (exit code 0)
 - Does not require a target
 
 **Example:**
 ```bash
 ./forb.sh --version
-# Output: V1.14.4
+# Output: V1.14.5
 ```
 
 ---
@@ -159,7 +159,7 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.14.4",
+  "version": "1.14.5",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [
@@ -875,7 +875,7 @@ floor, ceil, round, trunc
 ./forb.sh --update
 # Output:
 # Checking for updates...
-# New version available: v1.14.4 (Current: v1.12.0)
+# New version available: v1.14.5 (Current: v1.12.0)
 # Update? (y/n): y
 # [✔] Update successful!
 ```
@@ -1215,4 +1215,4 @@ fi
 
 **End of Documentation**
 
-*This documentation is complete for ForbCheck version 1.14.4. Future versions may introduce changes.*
+*This documentation is complete for ForbCheck version 1.14.5. Future versions may introduce changes.*

@@ -86,14 +86,21 @@ scan_source_engine() {
         export WHITELIST="$(echo "$AUTH_FUNCS" | tr '\n' ' ')"
     fi
 
-    # Run standalone source scan engine
-    echo "$files" | tr '\n' '\0' | xargs -0 perl "$INSTALL_DIR/lib/source_scan.pl"
+    # Run standalone source scan engine (parallelized)
+    local cores=$(get_core_count)
+    export NO_SUMMARY=true
+    echo "$files" | tr '\n' '\0' | xargs -0 -P "$cores" -n 25 perl "$INSTALL_DIR/lib/source_scan.pl"
+    unset NO_SUMMARY
     
     # Run standalone macro engine
-    log_info "   [${BLUE}Macro Expansion${NC}] -> Scanning for hidden calls..."
     local list=$(get_preset_list "$SELECTED_PRESET")
     local cores=$(get_core_count)
-    echo "$files" | xargs -P "$cores" -I {} perl "$INSTALL_DIR/lib/macro_engine.pl" "{}" "$list" "$BLACKLIST_MODE" "$USE_JSON" "$VERBOSE"
+    local scan_output=$(echo "$files" | xargs -P "$cores" -I {} perl "$INSTALL_DIR/lib/macro_engine.pl" "{}" "$list" "$BLACKLIST_MODE" "$USE_JSON" "$VERBOSE" "$USER_FUNCS" "$KEYWORDS_MACROS")
+    
+    if [ -n "$scan_output" ]; then
+        log_info "   [${BLUE}Macro Expansion${NC}] -> Scanning for hidden calls..."
+        while IFS= read -r line; do log_info "$line"; done <<< "$scan_output"
+    fi
 }
 
 source_scan() {
@@ -132,6 +139,16 @@ source_scan() {
         [ "$USE_JSON" = true ] && generate_json_output || generate_html_report
     else
         while IFS= read -r line; do log_info "$line"; done <<< "$scan_output"
+        
+        log_info "\n-------------------------------------------------"
+        local f_count=$(echo "$scan_output" | grep -c "FORBIDDEN")
+        if [ "$f_count" -eq 0 ]; then
+            log_info "\t\t${GREEN}RESULT: PERFECT${NC}"
+        else
+            log_info "${RED}Total forbidden functions found: $f_count${NC}"
+            log_info "\t\t${RED}RESULT: FAILURE${NC}"
+        fi
+
         if [ "$SHOW_TIME" = true ]; then
             local _end_t; if [ "$IS_MAC" = true ]; then _end_t=$(perl -MTime::HiRes=time -e 'print time')
             else _end_t=$(date +%s.%N); fi
@@ -160,18 +177,18 @@ extract_undefined_symbols() {
 }
 
 filter_forbidden_functions() {
-    local func; forbidden_list=""
-    while read -r func; do
-        [ -z "$func" ] || [[ "$func" =~ ^(_|ITM|edata|end|bss_start) ]] && continue
-        [ "$USE_MLX" = true ] && [[ "$func" =~ ^(X|shm|gethostname|puts|exit|strerror) ]] && continue
-        [ "$USE_MATH" = true ] && [[ "$func" =~ ^(abs|cos|sin|sqrt|pow|exp|log|fabs|floor)f?$ ]] && continue
-        grep -qx "$func" <<< "$MY_DEFINED" && continue
-        local is_auth=false
-        if [ "$BLACKLIST_MODE" = true ]; then grep -qx "$func" <<< "$AUTH_FUNCS" || is_auth=true
-        else grep -qx "$func" <<< "$AUTH_FUNCS" && is_auth=true; fi
-        if [ "$is_auth" = true ]; then [ "$SHOW_ALL" = true ] && printf "   [${GREEN}OK${NC}]         -> %s\n" "$func"
-        else grep -qE " U ${func}$" <<< "$ALL_UNDEFINED" && forbidden_list+="${func} "; fi
-    done <<< "$raw_funcs"
+    local filter_out=$(perl "$INSTALL_DIR/lib/symbol_filter.pl" \
+        "$raw_funcs" \
+        "$(echo "$AUTH_FUNCS" | tr '\n' ' ')" \
+        "$BLACKLIST_MODE" \
+        "$USE_MLX" \
+        "$USE_MATH" \
+        "$MY_DEFINED" \
+        "$SHOW_ALL")
+
+    # Display OK messages (stored in filter_out) and extract the forbidden list
+    echo "$filter_out" | grep -v "^FORBIDDEN_LIST:"
+    forbidden_list=$(echo "$filter_out" | grep "^FORBIDDEN_LIST:" | cut -d: -f2-)
 }
 
 print_analysis_report() {

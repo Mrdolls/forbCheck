@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Constants
-readonly VERSION="1.14.4" # Modular version
+readonly VERSION="1.14.5" # Modular version
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
@@ -77,7 +77,7 @@ for arg in "$@"; do
         _i=1
         while (( _i < ${#arg} )); do
             _two="${arg:$_i:2}"
-            if [[ "$_two" =~ ^(np|lm|up|op|lp|cp|rp|gp|mlx|oh|ol)$ ]]; then args+=("-$_two"); _i=$(( _i + 2 ))
+            if [[ "$_two" =~ ^(np|na|lm|up|op|lp|cp|rp|gp|mlx|oh|ol)$ ]]; then args+=("-$_two"); _i=$(( _i + 2 ))
             else args+=("-${arg:$_i:1}"); _i=$(( _i + 1 )); fi
         done
     else args+=("$arg"); fi
