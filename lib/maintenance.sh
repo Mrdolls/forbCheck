@@ -58,23 +58,73 @@ remove_preset() {
 edit_list() { [ ! -f "$ACTIVE_PRESET" ] && touch "$ACTIVE_PRESET"; open_editor "$ACTIVE_PRESET"; safe_exit 0; }
 
 update_script() {
-    local tmp=$(mktemp) remote_v
-    log_info "${BLUE}[Update] Checking latest version at ${CYAN}$UPDATE_URL${NC}..."
-    if curl -sL "$UPDATE_URL" -o "$tmp"; then
-        remote_v=$(grep -E "^(readonly )?VERSION=" "$tmp" | cut -d'"' -f2)
-        if [ -z "$remote_v" ]; then log_info "${RED}[Update] Error: Parse failure.${NC}"; rm -f "$tmp"; return 1; fi
-        log_info "${BLUE}[Update] Current: $VERSION | Remote: $remote_v"
-        if [ "$(version_to_int "$remote_v")" -gt "$(version_to_int "$VERSION")" ]; then
-            log_info "${YELLOW}[Update] New version detected!${NC}"
-            local t_script=$(realpath "$0" 2>/dev/null || echo "$0")
-            [ ! -w "$t_script" ] && { log_info "${RED}Error: No write permission.${NC}"; rm -f "$tmp"; return 1; }
-            if mv "$tmp" "$t_script" && chmod +x "$t_script"; then
-                log_info "${GREEN}[Update] Success!${NC}"; get_presets "auto"
-                log_info "${GREEN}${BOLD}[Update] Updated to $remote_v!${NC}"; safe_exit 0
-            else log_info "${RED}Fatal error during move.${NC}"; rm -f "$tmp"; return 1; fi
-        else log_info "${GREEN}[Update] Already at latest version.${NC}"; rm -f "$tmp"; fi
-    else log_info "${RED}[Update] Connection failure.${NC}"; rm -f "$tmp"; return 1; fi
-    safe_exit 0
+    local tmp_dir=$(mktemp -d)
+    local archive_url="https://github.com/Mrdolls/forbCheck/archive/refs/heads/main.tar.gz"
+    local remote_v
+    
+    log_info "${BLUE}[Update] Checking latest version...${NC}"
+    remote_v=$(curl -sL "$UPDATE_URL" | grep -E "^(readonly )?VERSION=" | cut -d'"' -f2)
+    
+    if [ -z "$remote_v" ]; then 
+        log_info "${RED}[Update] Error: Parse failure.${NC}"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+    
+    if [ "$(version_to_int "$remote_v")" -le "$(version_to_int "$VERSION")" ]; then
+        log_info "${GREEN}[Update] Already at latest version (${VERSION}).${NC}"
+        rm -rf "$tmp_dir"
+        return 0
+    fi
+    
+    log_info "${YELLOW}[Update] New version $remote_v detected!${NC}"
+    log_info "${BLUE}[Update] Downloading and syncing modular components...${NC}"
+    
+    if curl -sL "$archive_url" | tar -xz -C "$tmp_dir" 2>/dev/null; then
+        local src_root="$tmp_dir/forbCheck-main"
+        local updated_count=0
+        
+        sync_modular_file() {
+            local src="$1"
+            local dst="$2"
+            [ ! -f "$src" ] && return
+            
+            # Use cmp -s for macOS/Linux compatibility
+            if [ ! -f "$dst" ] || ! cmp -s "$src" "$dst"; then
+                mkdir -p "$(dirname "$dst")"
+                cp "$src" "$dst"
+                # Set executable permissions for scripts
+                [[ "$src" == *.sh || "$src" == *.pl ]] && chmod +x "$dst"
+                updated_count=$((updated_count + 1))
+            fi
+        }
+
+        # Sync main script
+        local t_script=$(realpath "$0" 2>/dev/null || echo "$0")
+        sync_modular_file "$src_root/forb.sh" "$t_script"
+        
+        # Sync library modules
+        for f in "$src_root/lib/"*; do
+            [ -f "$f" ] && sync_modular_file "$f" "$INSTALL_DIR/lib/$(basename "$f")"
+        done
+        
+        # Sync documentation
+        for f in "$src_root/doc/"*; do
+            [ -f "$f" ] && sync_modular_file "$f" "$INSTALL_DIR/doc/$(basename "$f")"
+        done
+        
+        # Handle presets (auto-mode adds missing ones only)
+        get_presets "auto"
+        
+        log_info "${GREEN}${BOLD}[Update] Success! Updated to $remote_v ($updated_count files synced).${NC}"
+        rm -rf "$tmp_dir"
+        # Exit to ensure the user restarts with the new modules
+        safe_exit 0
+    else
+        log_info "${RED}[Update] Fatal: Failed to download or extract archive.${NC}"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
 }
 
 auto_check_update() {
