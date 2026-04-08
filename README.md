@@ -1,12 +1,10 @@
 # ForbCheck
 
-![Version](https://img.shields.io/badge/version-1.14.3-blue.svg)
+![Version](https://img.shields.io/badge/version-1.14.4-blue.svg)
 ![License](https://img.shields.io/badge/license-OSI-green.svg)
-![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS(beta)-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)
 
 **ForbCheck** is a powerful utility that inspects your C/C++ binaries and source files to identify any unauthorized function calls.
-
-![forb](https://github.com/user-attachments/assets/4eefa013-ea38-4b4e-8eff-012fab215ca7)
 
 ---
 

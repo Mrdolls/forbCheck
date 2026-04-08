@@ -1,24 +1,51 @@
 #!/bin/bash
 
-FORB="bash $HOME/.forb/forb.sh"
-TARGET_DIR="${FORB_TEST_DIR:-/home/drago/Files/minishell-r}"
-LOG_DIR="$HOME/.forb/logs"
+# --- Environment Isolation Setup ---
+ORIG_HOME="$HOME"
+TEST_ROOT=$(mktemp -d /tmp/forb_test_XXXXXX)
+MOCK_HOME="$TEST_ROOT/home"
+INSTALL_DIR="$MOCK_HOME/.forb"
+
+# Bootstrap: Create isolated structure and copy library files
+mkdir -p "$INSTALL_DIR/lib" "$INSTALL_DIR/doc" "$INSTALL_DIR/presets" "$INSTALL_DIR/logs"
+cp "$ORIG_HOME/.forb/forb.sh" "$INSTALL_DIR/"
+cp -r "$ORIG_HOME/.forb/lib/"* "$INSTALL_DIR/lib/"
+cp -r "$ORIG_HOME/.forb/doc/"* "$INSTALL_DIR/doc/"
+
+# Override HOME to redirect ~/.forb to /tmp
+export HOME="$MOCK_HOME"
+
+# Mock Presets
+printf "malloc free printf\n" > "$INSTALL_DIR/presets/minishell.preset"
+printf "malloc free printf\n" > "$INSTALL_DIR/presets/default.preset"
+
+FORB="bash $INSTALL_DIR/forb.sh"
+LOG_DIR="$INSTALL_DIR/logs"
 PASS=0; FAIL=0
+
+# Cleanup handler
+cleanup() {
+    rm -rf "$TEST_ROOT"
+}
+trap cleanup EXIT
 
 pass() { echo "  ✅ PASS: $1"; PASS=$((PASS+1)); }
 fail() { echo "  ❌ FAIL: $1 → $2"; FAIL=$((FAIL+1)); }
 section() { echo ""; echo "══════════════════════════════════════════════"; echo " 🧪 $1"; echo "══════════════════════════════════════════════"; }
 
-cd "$TARGET_DIR" || exit 1
+# --- SETUP: Mock Project ---
+_TDIR="$TEST_ROOT/minishell"
+mkdir -p "$_TDIR/srcs/core"
+cd "$_TDIR" || exit 1
+printf '#include <stdlib.h>\n#include <stdio.h>\nvoid test_a(void) { gets(NULL); malloc(10); puts("x"); }\n' > "a.c"
+printf '#include <stdio.h>\nvoid test_b(void) { printf("y"); gets(NULL); }\n'                              > "b.c"
+printf 'void build_prompt() { printf("> "); }\n'                                                       > "srcs/core/prompt.c"
+# Create mock binary
+printf '#include <stdlib.h>\nint main() { void *p = malloc(10); if (p) free(p); return 0; }\n' > main.c
+gcc main.c -o minishell 2>/dev/null || touch minishell
 
-# ─── SETUP: Mini-projet de test (évite de scanner tout minishell-r à chaque test) ─
-# QF = un seul fichier avec gets (forbidden), malloc et puts (authorized)
-# Utilisé via -f pour rendre les tests de flags rapides (< 1s au lieu de 10-30s)
-_TDIR=$(mktemp -d)
-printf '#include <stdlib.h>\n#include <stdio.h>\nvoid test_a(void) { gets(NULL); malloc(10); puts("x"); }\n' > "$_TDIR/a.c"
-printf '#include <stdio.h>\nvoid test_b(void) { printf("y"); gets(NULL); }\n'                              > "$_TDIR/b.c"
-QF="-f $_TDIR/a.c"
-QF2="-f $_TDIR/a.c $_TDIR/b.c"
+QF="-f a.c"
+QF2="-f a.c b.c"
 
 # ─── SECTION 1: HELP & VERSION ────────────────────────────────────────────────
 section "Section 1: Help & Version"
@@ -217,7 +244,7 @@ section "Section 13: Gestion d'erreurs"
 out=$($FORB --invalid-flag-xyz 2>&1)
 echo "$out" | grep -q "Unknown option" && pass "Flag inconnu → 'Unknown option'" || fail "flag inconnu" "$out"
 
-out=$($FORB /tmp/nonexistent_binary_xyz -np $QF 2>&1)
+out=$($FORB "$TEST_ROOT/nonexistent_binary_xyz" -np $QF 2>&1)
 echo "$out" | grep -qE "Falling back|Source Scan|Scanning|Scan Mode" && pass "Target inexistant → fallback source scan" || fail "target inexistant" "$(echo "$out" | head -3)"
 
 # ─── SECTION 14: EDGE CASES & COMBINAISONS EXTRÊMES ──────────────────────────
@@ -234,10 +261,10 @@ echo "$out" | grep -qi "blacklist" && pass "  Mega flag : -b bien activé" || fa
 out=$($FORB -l -s $QF 2>&1)
 echo "$out" | grep -qE "Scan Mode.*Source|Scanning" && pass "-l et -s combinés → Scan Source prend la priorité et s'exécute" || fail "-l -s plantage" "$(echo "$out" | head -2)"
 
-touch /tmp/empty_forb_test.c
-out=$($FORB -s -f /tmp/empty_forb_test.c 2>&1)
+touch "$TEST_ROOT/empty_forb_test.c"
+out=$($FORB -s -f "$TEST_ROOT/empty_forb_test.c" 2>&1)
 echo "$out" | grep -q "PERFECT" && pass "Scan fichier vide → pas de crash (PERFECT)" || fail "Scan fichier vide" "$(echo "$out" | head -2)"
-rm -f /tmp/empty_forb_test.c
+rm -f "$TEST_ROOT/empty_forb_test.c"
 
 # ─── SECTION 15: HTML & OUTPUT UI ─────────────────────────────────────────────
 section "Section 15: HTML & Output UI"
@@ -245,25 +272,25 @@ section "Section 15: HTML & Output UI"
 out=$($FORB -s -np --html $QF 2>&1)
 echo "$out" | grep -q "Rapport HTML généré avec succès dans" && pass "--html génère bien le fichier et masque l'UI" || fail "--html" "$out"
 
-rm -rf /tmp/forb_mock_bin_dir
-mkdir -p /tmp/forb_mock_bin_dir
-echo '#!/bin/bash' > /tmp/forb_mock_bin_dir/xdg-open
-echo '#!/bin/bash' > /tmp/forb_mock_bin_dir/open
-echo '#!/bin/bash' > /tmp/forb_mock_bin_dir/explorer.exe
-chmod +x /tmp/forb_mock_bin_dir/*
+rm -rf "$TEST_ROOT/forb_mock_bin_dir"
+mkdir -p "$TEST_ROOT/forb_mock_bin_dir"
+echo '#!/bin/bash' > "$TEST_ROOT/forb_mock_bin_dir/xdg-open"
+echo '#!/bin/bash' > "$TEST_ROOT/forb_mock_bin_dir/open"
+echo '#!/bin/bash' > "$TEST_ROOT/forb_mock_bin_dir/explorer.exe"
+chmod +x "$TEST_ROOT/forb_mock_bin_dir/"*
 OLD_PATH="$PATH"
-export PATH="/tmp/forb_mock_bin_dir:$PATH"
+export PATH="$TEST_ROOT/forb_mock_bin_dir:$PATH"
 
 out=$($FORB -oh 2>&1)
 echo "$out" | grep -q "Opening HTML reports directory" && pass "-oh déclenche bien l'ouverture du dossier" || fail "-oh output" "$out"
 
 export PATH="$OLD_PATH"
-rm -rf /tmp/forb_mock_bin_dir
+rm -rf "$TEST_ROOT/forb_mock_bin_dir"
 
 # ─── SECTION 16: MOTEUR DE PARSING C (Anti-quotes & commentaires) ─────────────
 section "Section 16: Parser C (Robustesse)"
 
-cat << 'EOF' > /tmp/forb_mock_parser.c
+cat << 'EOF' > "$TEST_ROOT/forb_mock_parser.c"
 #include <stdio.h>
 #include <stdlib.h>
 // printf("forbidden1");
@@ -276,7 +303,7 @@ void local_func() { return; }
 void forbidden_call() { puts("hi"); }
 EOF
 
-out=$($FORB -s -np -f /tmp/forb_mock_parser.c 2>&1)
+out=$($FORB -s -np -f "$TEST_ROOT/forb_mock_parser.c" 2>&1)
 echo "$out" | grep -qv "forbidden1" && pass "Parser: Ignore appels dans commentaires ligne simple" || fail "Parser com simple" "$(echo "$out" | grep forbidden1)"
 echo "$out" | grep -qv "malloc" && pass "Parser: Ignore appels dans commentaires multi-lignes" || fail "Parser com bloc" "$(echo "$out" | grep malloc)"
 echo "$out" | grep -qv "gets" && pass "Parser: Ignore appels dans chaines de caractères string" || fail "Parser str" "$(echo "$out" | grep gets)"
@@ -290,39 +317,39 @@ echo "$out" | grep -q "puts" && pass "Parser: Trouve les vrais appels de fonctio
 # ─── SECTION 17: FILTRES DE LIBRAIRIES (-mlx, -lm) ────────────────────────────
 section "Section 17: Filtres Librairies (-mlx, -lm)"
 
-cat << 'EOF' > /tmp/forb_mock_libs.c
+cat << 'EOF' > "$TEST_ROOT/forb_mock_libs.c"
 void test() {
     mlx_init();
     cos(0.0);
 }
 EOF
 
-out=$($FORB -s -np -f /tmp/forb_mock_libs.c 2>&1)
+out=$($FORB -s -np -f "$TEST_ROOT/forb_mock_libs.c" 2>&1)
 echo "$out" | grep -q "mlx_init" && pass "Library: mlx_init est forbidden par défaut" || fail "-mlx default" ""
 echo "$out" | grep -q "cos" && pass "Library: cos est forbidden par défaut" || fail "-lm default" ""
 
-out=$($FORB -s -np -mlx -f /tmp/forb_mock_libs.c 2>&1)
+out=$($FORB -s -np -mlx -f "$TEST_ROOT/forb_mock_libs.c" 2>&1)
 echo "$out" | grep -qv "mlx_init" && pass "Library: -mlx autorise les fonctions mlx_*" || fail "-mlx flag" "mlx toujours forbidden"
 echo "$out" | grep -q "cos" && pass "Library: -mlx n'impacte pas math" || fail "-mlx side effect" ""
 
-out=$($FORB -s -np -lm -f /tmp/forb_mock_libs.c 2>&1)
+out=$($FORB -s -np -lm -f "$TEST_ROOT/forb_mock_libs.c" 2>&1)
 echo "$out" | grep -qv "cos" && pass "Library: -lm autorise les fonctions math" || fail "-lm flag" "math toujours forbidden"
 
 
 # ─── SECTION 18: FICHIERS CIBLES MULTIPLES (-f) & PATHS ────────────────────────
 section "Section 18: Ciblage de Fichiers (-f)"
 
-touch /tmp/forb_mock_f1.c /tmp/forb_mock_f2.c
-out=$($FORB -s -np -f /tmp/forb_mock_f1.c /tmp/forb_mock_f2.c 2>&1)
+touch "$TEST_ROOT/forb_mock_f1.c" "$TEST_ROOT/forb_mock_f2.c"
+out=$($FORB -s -np -f "$TEST_ROOT/forb_mock_f1.c" "$TEST_ROOT/forb_mock_f2.c" 2>&1)
 echo "$out" | grep -qE "Scanning 2 source file(\(s\))?" && pass "-f accepte multiples cibles" || fail "-f cibles" "$(echo "$out" | grep Scanning)"
-out=$($FORB -s -np -f /tmp/nonexistent123.c 2>&1)
+out=$($FORB -s -np -f "$TEST_ROOT/nonexistent123.c" 2>&1)
 echo "$out" | grep -qvE "Scanning 1 source files" && pass "-f résiste aux fichiers inexistants" || fail "-f invalid" ""
 
 
 # ─── SECTION 19: STRUCTURE JSON AVANCÉE ───────────────────────────────────────
 section "Section 19: JSON Avancé"
 
-out=$($FORB -s -np -f /tmp/forb_mock_libs.c --json 2>&1)
+out=$($FORB -s -np -f "$TEST_ROOT/forb_mock_libs.c" --json 2>&1)
 arr_len=$(echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('results', [])))" 2>/dev/null)
 [ "${arr_len:-0}" -ge 2 ] && pass "JSON: tableau results grandit selon les occurrences (scale multiple)" || fail "JSON scale" "len=$arr_len"
 out=$($FORB -np -s --json $QF 2>&1)
@@ -334,8 +361,8 @@ echo "$out" | grep -q "status" && pass "JSON: retourne un status json lors d'usa
 
 # ─── SECTION 20: SYSTÈME DE CACHE BINAIRE ─────────────────────────────────────
 section "Section 20: Cache Binaire"
-mkdir -p /tmp/forb_cache_test
-cd /tmp/forb_cache_test || exit 1
+mkdir -p "$TEST_ROOT/forb_cache_test"
+cd "$TEST_ROOT/forb_cache_test" || exit 1
 
 echo "int main(){return 0;}" > ./main.c
 gcc ./main.c -o ./bin 2>/dev/null
@@ -354,8 +381,8 @@ else
     pass "Cache: Skip cache update check"
 fi
 
-cd "$TARGET_DIR" || exit 1
-rm -rf /tmp/forb_cache_test /tmp/forb_mock_bin
+cd "$_TDIR" || exit 1
+rm -rf "$TEST_ROOT/forb_cache_test"
 
 
 # ─── SECTION 21: LOGGING AVANCÉ ───────────────────────────────────────────────
@@ -375,9 +402,9 @@ echo "$out" | grep -q "Blacklist" && pass "Print: Affiche le string Blacklist si
 # ─── SECTION 22: AUTO-DETECT TARGET ET PRESETS ────────────────────────────────
 section "Section 22: Auto-Detection Dossier & Fallback"
 
-mkdir -p /tmp/forb_mock_proj
-touch /tmp/forb_mock_proj/dummy.c
-cd /tmp/forb_mock_proj
+mkdir -p "$TEST_ROOT/forb_mock_proj"
+touch "$TEST_ROOT/forb_mock_proj/dummy.c"
+cd "$TEST_ROOT/forb_mock_proj"
 out=$(echo "n" | $FORB -np 2>&1)
 echo "$out" | grep -qE "No binary found|Target .* not found" && pass "Fallback: Réagit quand le binaire par défaut est absent d'un dossier nu" || fail "Fallback no bin" ""
 
@@ -386,8 +413,8 @@ echo "exit" > "$HOME/.forb/presets/forb_mock_proj.preset"
 out=$(echo "n" | $FORB -s 2>&1)
 echo "$out" | grep -q "Preset.*forb_mock_proj" && pass "Auto-Preset: Sélectionne dynamiquement le preset pointant sur le nom /dir" || fail "Auto preset fallback" ""
 rm -f "$HOME/.forb/presets/forb_mock_proj.preset"
-cd - > /dev/null
-rm -rf /tmp/forb_mock_proj
+cd "$_TDIR" || exit 1
+rm -rf "$TEST_ROOT/forb_mock_proj"
 
 
 # ─── SECTION 23: PARSING DES CIBLES MULTIPLES ET ORDRE ────────────────────────
@@ -408,7 +435,7 @@ echo "$out" | grep -qE "Checking functions|empty" && pass "Arguments: -l fonctio
 section "Section 24: Macro Obfuscation (ForceDefine)"
 
 # 1. Recursive Token Pasting (Whitelist Mode)
-cat << 'EOF' > /tmp/macro_sneaky.c
+cat << 'EOF' > "$TEST_ROOT/macro_sneaky.c"
 #define P pri
 #define N ntf
 #define CAT(a,b) a##b
@@ -419,11 +446,11 @@ int main() {
     return 0;
 }
 EOF
-out=$($FORB -s -np -f /tmp/macro_sneaky.c 2>&1)
+out=$($FORB -s -np -f "$TEST_ROOT/macro_sneaky.c" 2>&1)
 echo "$out" | grep -q "gets" && pass "Macro: Détecte gets() fragmenté par token pasting (##)" || fail "Macro token pasting" "$(echo "$out" | grep gets)"
 
 # 2. Variadic Macros Expansion
-cat << 'EOF' > /tmp/macro_va.c
+cat << 'EOF' > "$TEST_ROOT/macro_va.c"
 #define CALL(f, ...) f(__VA_ARGS__)
 int main() {
     CALL(printf, "hi\n");
@@ -431,25 +458,25 @@ int main() {
     return 0;
 }
 EOF
-out=$($FORB -s -np -f /tmp/macro_va.c 2>&1)
+out=$($FORB -s -np -f "$TEST_ROOT/macro_va.c" 2>&1)
 echo "$out" | grep -q "gets" && pass "Macro: Détecte fonction interdite via macro variadique" || fail "Macro variadic" "$(echo "$out" | grep gets)"
 
 # 3. Cross-file Header Inclusion
-mkdir -p /tmp/macro_proj
-cat << 'EOF' > /tmp/macro_proj/secret.h
+mkdir -p "$TEST_ROOT/macro_proj"
+cat << 'EOF' > "$TEST_ROOT/macro_proj/secret.h"
 #define TRAP gets
 EOF
-cat << 'EOF' > /tmp/macro_proj/main.c
+cat << 'EOF' > "$TEST_ROOT/macro_proj/main.c"
 #include "secret.h"
 int main() {
     TRAP(NULL);
     return 0;
 }
 EOF
-out=$($FORB -s -np -f /tmp/macro_proj/main.c 2>&1)
+out=$($FORB -s -np -f "$TEST_ROOT/macro_proj/main.c" 2>&1)
 echo "$out" | grep -q "gets" && pass "Macro: Détecte macro définie dans un header inclus récursivement" || fail "Macro inclusion" "$(echo "$out" | grep gets)"
 
-cat << 'EOF' > /tmp/macro_shield.c
+cat << 'EOF' > "$TEST_ROOT/macro_shield.c"
 #define IF if
 #define STR "printf"
 int main() {
@@ -457,18 +484,18 @@ int main() {
     return 0;
 }
 EOF
-out=$($FORB -s -p -f /tmp/macro_shield.c 2>&1)
+out=$($FORB -s -p -f "$TEST_ROOT/macro_shield.c" 2>&1)
 echo "$out" | grep -qv "printf" && pass "Macro: Ignore correctement les mots-clés (if) et les chaines générées par macro" || fail "Macro shield" "$(echo "$out" | grep printf)"
 
 cat << 'EOF' > "$HOME/.forb/presets/macro_bl_test.preset"
 BLACKLIST_MODE
 printf
 EOF
-out=$(SELECTED_PRESET=macro_bl_test $FORB -s -f /tmp/macro_sneaky.c 2>&1)
+out=$(SELECTED_PRESET=macro_bl_test $FORB -s -f "$TEST_ROOT/macro_sneaky.c" 2>&1)
 echo "$out" | grep -q "printf" && pass "Macro: Détecte printf() caché en mode Blacklist" || fail "Macro blacklist" "$(echo "$out" | grep printf)"
 
 echo "y" | $FORB --no-auto -rp macro_bl_test > /dev/null 2>&1
-rm -rf /tmp/macro_sneaky.c /tmp/macro_va.c /tmp/macro_proj /tmp/macro_shield.c
+rm -rf "$TEST_ROOT/macro_sneaky.c" "$TEST_ROOT/macro_va.c" "$TEST_ROOT/macro_proj" "$TEST_ROOT/macro_shield.c"
 
 
 # ─── CLEANUP ──────────────────────────────────────────────────────────────────

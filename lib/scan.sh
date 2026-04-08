@@ -92,7 +92,8 @@ scan_source_engine() {
     # Run standalone macro engine
     log_info "   [${BLUE}Macro Expansion${NC}] -> Scanning for hidden calls..."
     local list=$(get_preset_list "$SELECTED_PRESET")
-    echo "$files" | xargs -I {} perl "$INSTALL_DIR/lib/macro_engine.pl" "{}" "$list" "$BLACKLIST_MODE" "$USE_JSON" "$VERBOSE"
+    local cores=$(get_core_count)
+    echo "$files" | xargs -P "$cores" -I {} perl "$INSTALL_DIR/lib/macro_engine.pl" "{}" "$list" "$BLACKLIST_MODE" "$USE_JSON" "$VERBOSE"
 }
 
 source_scan() {
@@ -144,14 +145,15 @@ source_scan() {
 }
 
 extract_undefined_symbols() {
+    local cores=$(get_core_count)
     if [ "$IS_MAC" = true ]; then
         raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/^_//;s/@.*//' | sort -u)
-        NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -o 2>/dev/null)
+        NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P"$cores" nm -o 2>/dev/null)
         MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sed -E 's/^_//' | sort -u)
         ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA" | sed -E 's/ U _/ U /')
     else
         raw_funcs=$(nm -u "$TARGET" 2>/dev/null | awk '{print $NF}' | sed -E 's/@.*//' | sort -u)
-        NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P4 nm -A 2>/dev/null)
+        NM_RAW_DATA=$(find . -not -path '*/.*' -type f \( -name "*.o" -o -name "*.a" \) ! -name "$TARGET" ! -path "*mlx*" ! -path "*MLX*" -print0 2>/dev/null | xargs -0 -P"$cores" nm -A 2>/dev/null)
         MY_DEFINED=$(grep -E ' [TRD] ' <<< "$NM_RAW_DATA" | awk '{print $NF}' | sort -u)
         ALL_UNDEFINED=$(grep " U " <<< "$NM_RAW_DATA")
     fi
@@ -225,19 +227,20 @@ run_analysis() {
 }
 
 check_binary_cache() {
-    local cache_dir="$INSTALL_DIR/cache"
-    local cache_file="$cache_dir/binary_cache"
-    mkdir -p "$cache_dir"; [ ! -f "$cache_file" ] && touch "$cache_file"
-    local cur_lines=$(find . -name "*.c" -not -path '*/.*' -type f -exec wc -l {} + 2>/dev/null | awk '{s+=$1} END {print s+0}')
-    local bin_mt=$(get_file_mtime "$TARGET"); local cur_size=$(get_file_size_all_src)
-    local t_name=$(basename "$TARGET"); local ref_data=$(grep "^$(printf '%s\n' "$t_name" | sed 's/[.[\*^$/]/\\&/g'):" "$cache_file" 2>/dev/null)
-    local ref_lines=$(echo "$ref_data" | cut -d: -f2); local ref_size=$(echo "$ref_data" | cut -d: -f3); local ref_mt=$(echo "$ref_data" | cut -d: -f4)
-    if [[ "$bin_mt" != "$ref_mt" ]]; then
-        local tmp=$(mktemp); grep -v "^$(printf '%s\n' "$t_name" | sed 's/:/\\:/g'):" "$cache_file" > "$tmp"; mv "$tmp" "$cache_file"
-        echo "$(printf '%s\n' "$t_name" | sed 's/:/\\:/g'):$cur_lines:$cur_size:$bin_mt" >> "$cache_file"
-        SET_WARNING=false
+    local bin_mt=$(get_file_mtime "$TARGET")
+    local latest_src_mt=0
+    
+    if [ "$IS_MAC" = true ]; then
+        latest_src_mt=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \) -exec stat -f %m {} + 2>/dev/null | sort -n | tail -1)
     else
-        local diff=$((cur_size - ref_size)); local abs_diff=${diff#-}
-        if [[ "$cur_lines" != "$ref_lines" ]] || [[ "$abs_diff" -gt 2 ]]; then SET_WARNING=true; else SET_WARNING=false; fi
+        latest_src_mt=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \) -exec stat -c %Y {} + 2>/dev/null | sort -n | tail -1)
+    fi
+    
+    [ -z "$latest_src_mt" ] && latest_src_mt=0
+    
+    if [ "$latest_src_mt" -gt "$bin_mt" ]; then
+        SET_WARNING=true
+    else
+        SET_WARNING=false
     fi
 }

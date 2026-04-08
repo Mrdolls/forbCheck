@@ -65,6 +65,14 @@ version_to_int() {
     echo "$1" | sed 's/v//' | awk -F. '{ printf("%d%03d%03d\n", $1,$2,$3); }'
 }
 
+get_core_count() {
+    if [ "$IS_MAC" = true ]; then
+        sysctl -n hw.ncpu 2>/dev/null || echo 2
+    else
+        nproc 2>/dev/null || echo 2
+    fi
+}
+
 crop_line() {
     local func="$1"
     local code="$2"
