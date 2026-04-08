@@ -174,6 +174,17 @@ open_html() {
     safe_exit 0
 }
 
+open_logs() {
+    mkdir -p "$LOG_DIR"
+    log_info "\033[32mOpening logs directory: $LOG_DIR\033[0m"
+    if command -v explorer.exe > /dev/null; then (cd "$LOG_DIR" && explorer.exe .)
+    elif command -v xdg-open > /dev/null; then xdg-open "$LOG_DIR"
+    elif command -v open > /dev/null; then open "$LOG_DIR"
+    else log_info "\033[31mError: Could not open the folder automatically. Path: $LOG_DIR\033[0m"
+    fi
+    safe_exit 0
+}
+
 parse_preset_flags() {
     local raw_content="$1"
     [ -z "$raw_content" ] && { log_info "${YELLOW}[Warning] Preset is empty.${NC}"; AUTH_FUNCS=""; return; }
