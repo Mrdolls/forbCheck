@@ -1,8 +1,8 @@
 # DOCUMENTATION COMPLÈTE - ForbCheck (forb.sh)
 
-**Version :** 1.12.0
+**Version :** 1.14.0
 **Auteur :** Mrdolls
-**Date de mise à jour :** 2026-04-06
+**Date de mise à jour :** 2026-04-08
 **Repository :** https://github.com/Mrdolls/forbCheck
 
 ---
@@ -46,6 +46,7 @@ ForbCheck fonctionne sur la base de **listes de fonctions** stockées dans des *
 | Répertoire | Chemin | Description |
 |-----------|--------|-------------|
 | Installation | `~/.forb/` | Répertoire racine (créé automatiquement) |
+| Bibliothèque | `~/.forb/lib/` | Modules internes (Shell & Perl) constituant le cœur |
 | Presets | `~/.forb/presets/` | Stockage des fichiers `.preset` |
 | Logs | `~/.forb/logs/` | Fichiers logs générés avec `--log` |
 | Rapports HTML | `~/.forb/reports_html/` | Fichiers HTML générés avec `--html` |
@@ -131,7 +132,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 **Exemple :**
 ```bash
 ./forb.sh --version
-# Output: V1.11.0
+# Output: V1.14.0
 ```
 
 ---
@@ -158,7 +159,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.12.0",
+  "version": "1.14.0",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [
@@ -848,7 +849,7 @@ floor, ceil, round, trunc
 ./forb.sh --update
 # Output:
 # Checking for updates...
-# New version available: v1.12.0 (Current: v1.11.0)
+# New version available: v1.14.0 (Current: v1.12.0)
 # Update? (y/n): y
 # [✔] Update successful!
 ```
@@ -1246,7 +1247,7 @@ fi
 
 1. **Faux positifs en source** : Les commentaires ne sont que partiellement filtrés
 2. **Symboles non-liés** : Des symboles peuvent être listés sans être utilisés
-3. **Macros** : Les appels via macros peuvent ne pas être détectés
+3. **Macros complexes** : Désormais largement supportées (##, variadiques), mais les cas d'obfuscation extrême peuvent varier
 4. **Inline functions** : Peuvent ne pas apparaître comme symboles dans le binaire
 
 ### Bonnes pratiques
@@ -1267,4 +1268,4 @@ fi
 
 **Fin de la documentation**
 
-*Cette documentation est complète pour la version 1.11.0 de ForbCheck. Les futures versions peuvent introduire des changements.*
+*Cette documentation est complète pour la version 1.14.0 de ForbCheck. Les futures versions peuvent introduire des changements.*

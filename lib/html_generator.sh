@@ -10,12 +10,12 @@ generate_html_report() {
 
     local timestamp=$(date +"%Y-%m-%d_%Hh%M")
     local html_file="$html_dir/forb_report_${timestamp}.html"
-    
+
     local count_val=0
     if [ "$IS_SOURCE_SCAN" = true ]; then
         [ -n "$JSON_RAW_DATA" ] && count_val=$(echo "$JSON_RAW_DATA" | grep -c "MATCH")
     else
-        [ -n "$forbidden_list" ] && count_val=$(echo "$forbidden_list" | wc -w)
+        [ -n "$forbidden_list" ] && count_val=$(echo "$forbidden_list" | wc -w | tr -d ' ')
     fi
 
     local status="PERFECT"
@@ -136,7 +136,7 @@ EOF
                 local fpath=$(echo "$line" | perl -nle 'print $1 if /in (\S+?):/')
                 local lnum=$(echo "$line"  | perl -nle 'print $1 if /:([0-9]+)$/')
                 lnum=${lnum:-0}
-                
+
                 cat <<EOF >> "$html_file"
             <div class="issue-card" style="animation-delay: ${delay}s;">
                 <h3 class="func-name">$fname</h3>
