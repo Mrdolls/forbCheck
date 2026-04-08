@@ -6,6 +6,8 @@
 
 **ForbCheck** is a powerful utility that inspects your C/C++ binaries and source files to identify any unauthorized function calls.
 
+![forb](https://github.com/user-attachments/assets/4eefa013-ea38-4b4e-8eff-012fab215ca7)
+
 ---
 
 ## Key Features
