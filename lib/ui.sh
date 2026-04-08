@@ -29,6 +29,7 @@ show_help() {
     printf "  %-24s %s\n" "--json" "Generate a JSON output for automations"
     printf "  %-24s %s\n" "--html" "Generate a beautiful interactive HTML report"
     printf "  %-24s %s\n" "-oh, --open-html" "Open the folder containing HTML reports"
+    printf "  %-24s %s\n" "-ol, --open-logs" "Open the folder containing log files"
     printf "  %-24s %s\n" "--log" "Generate a .log of the output"
     printf "  %-24s %s\n" "-l, --list [<funcs...>]" "Show list or check specific functions"
     printf "  %-24s %s\n" "-e, --edit" "Edit authorized list"
