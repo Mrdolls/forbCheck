@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Constants
-readonly VERSION="1.14.5" # Modular version
+readonly VERSION="1.14.6" # Modular version
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
@@ -197,18 +197,20 @@ log_info "${BLUE}Preset     :${NC} ${BOLD}${SELECTED_PRESET}${NC} ${CYAN}($( [ "
 
 log_info "\n${BLUE}${BOLD}Execution:${NC}\n-------------------------------------------------"
 
-if [ "$IS_MAC" = true ]; then START_TIME=$(perl -MTime::HiRes=time -e 'print time')
-else START_TIME=$(date +%s.%N); fi
+START_TIME=$(get_timestamp)
 
 run_analysis
 total_errors=$?
 
-if [ "$IS_MAC" = true ]; then DURATION=$(echo "$(perl -MTime::HiRes=time -e 'print time') - $START_TIME" | bc 2>/dev/null || echo "0")
-else DURATION=$(echo "$(date +%s.%N) - $START_TIME" | bc 2>/dev/null || echo "0")
-fi
+DURATION=$(calculate_duration "$START_TIME" "$(get_timestamp)")
 
-log_info "-------------------------------------------------\n"
-[ $total_errors -eq 0 ] && log_info "\t\t${GREEN}RESULT: PERFECT" || log_info "\t\t${RED}RESULT: FAILURE"
-[ "$SHOW_TIME" = true ] && log_info "Execution time: ${DURATION}s"
+log_info "\n-------------------------------------------------"
+if [ "$FORBIDDEN_COUNT" -gt 0 ]; then
+    center_log "${RED}Total forbidden functions found: $FORBIDDEN_COUNT${NC}"
+    center_log "${RED}RESULT: FAILURE${NC}"
+else
+    center_log "${GREEN}RESULT: PERFECT${NC}"
+fi
+[ "$SHOW_TIME" = true ] && center_log "${BLUE}Execution time:${NC} ${CYAN}${DURATION}s${NC}"
 [ $total_errors -ne 0 ] && safe_exit 1
 safe_exit 0

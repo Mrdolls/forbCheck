@@ -1,6 +1,6 @@
 # ForbCheck
 
-![Version](https://img.shields.io/badge/version-1.14.5-blue.svg)
+![Version](https://img.shields.io/badge/version-1.14.6-blue.svg)
 ![License](https://img.shields.io/badge/license-OSI-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)
 

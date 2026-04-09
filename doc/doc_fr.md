@@ -1,8 +1,8 @@
 # DOCUMENTATION COMPLÈTE - ForbCheck (forb.sh)
 
-**Version :** 1.14.5
+**Version :** 1.14.6
 **Auteur :** Mrdolls
-**Date de mise à jour :** 2026-04-08
+**Date de mise à jour :** 2026-04-09
 **Repository :** https://github.com/Mrdolls/forbCheck
 
 ---
@@ -132,7 +132,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 **Exemple :**
 ```bash
 ./forb.sh --version
-# Output: V1.14.5
+# Output: V1.14.6
 ```
 
 ---
@@ -159,7 +159,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.14.5",
+  "version": "1.14.6",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [

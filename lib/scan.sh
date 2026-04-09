@@ -104,12 +104,10 @@ scan_source_engine() {
 }
 
 source_scan() {
-    local _src_start
-    if [ "$IS_MAC" = true ]; then _src_start=$(perl -MTime::HiRes=time -e 'print time')
-    else _src_start=$(date +%s.%N); fi
-    
     resolve_preset "source"
     load_preset "$SELECTED_PRESET"
+
+    local _src_start=$(get_timestamp)
     
     local files_list=""
     if [ -n "$SPECIFIC_FILES" ]; then
@@ -143,18 +141,15 @@ source_scan() {
         log_info "\n-------------------------------------------------"
         local f_count=$(echo "$scan_output" | grep -c "FORBIDDEN")
         if [ "$f_count" -eq 0 ]; then
-            log_info "\t\t${GREEN}RESULT: PERFECT${NC}"
+            center_log "${GREEN}RESULT: PERFECT${NC}"
         else
-            log_info "${RED}Total forbidden functions found: $f_count${NC}"
-            log_info "\t\t${RED}RESULT: FAILURE${NC}"
+            center_log "${RED}Total forbidden functions found: $f_count${NC}"
+            center_log "${RED}RESULT: FAILURE${NC}"
         fi
 
         if [ "$SHOW_TIME" = true ]; then
-            local _end_t; if [ "$IS_MAC" = true ]; then _end_t=$(perl -MTime::HiRes=time -e 'print time')
-            else _end_t=$(date +%s.%N); fi
-            local _dur=$(echo "$_end_t - $_src_start" | bc 2>/dev/null || echo "0")
-            [[ "$_dur" == .* ]] && _dur="0${_dur}"
-            log_info "Execution time: ${_dur}s"
+            local _dur=$(calculate_duration "$_src_start" "$(get_timestamp)")
+            center_log "${BLUE}Execution time:${NC} ${CYAN}${_dur}s${NC}"
         fi
         log_info "\n${GREEN}Source audit complete.${NC}"
     fi
@@ -233,12 +228,12 @@ build_grep_results() {
 run_analysis() {
     export IS_SOURCE_SCAN=false
     extract_undefined_symbols; filter_forbidden_functions; build_grep_results
-    local count=0; [ -n "$forbidden_list" ] && count=$(echo "$forbidden_list" | wc -w)
+    export FORBIDDEN_COUNT=0; [ -n "$forbidden_list" ] && FORBIDDEN_COUNT=$(echo "$forbidden_list" | wc -w)
     if [ "$USE_JSON" = true ] || [ "$USE_HTML" = true ]; then
-        [ "$USE_JSON" = true ] && generate_json_output "$count" || generate_html_report "$count"
-        [ $count -eq 0 ] && return 0 || return 1
+        [ "$USE_JSON" = true ] && generate_json_output "$FORBIDDEN_COUNT" || generate_html_report "$FORBIDDEN_COUNT"
+        [ $FORBIDDEN_COUNT -eq 0 ] && return 0 || return 1
     else
-        print_analysis_report; local errs=$?; if [ $errs -eq 0 ] && [ $count -eq 0 ]; then log_info "\t${GREEN}No forbidden functions detected.${NC}"; else log_info "\n${RED}Total forbidden functions found: $count${NC}"; fi
+        print_analysis_report; local errs=$?; if [ $errs -eq 0 ] && [ $FORBIDDEN_COUNT -eq 0 ]; then log_info "\t${GREEN}No forbidden functions detected.${NC}"; fi
         return $errs
     fi
 }

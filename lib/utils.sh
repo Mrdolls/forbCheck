@@ -43,6 +43,36 @@ get_file_size_all_src() {
     fi
 }
 
+get_timestamp() {
+    if [ "$IS_MAC" = true ]; then
+        perl -MTime::HiRes=time -e 'print time'
+    else
+        date +%s.%N
+    fi
+}
+
+calculate_duration() {
+    local start="$1"
+    local end="$2"
+    local dur=$(echo "$end - $start" | bc 2>/dev/null || echo "0")
+    # Add leading zero if needed
+    [[ "$dur" == .* ]] && dur="0${dur}"
+    # Truncate to 3 decimal places
+    echo "$dur" | awk '{printf "%.3f", $1}'
+}
+
+center_log() {
+    local text="$1"
+    local width=49
+    # Strip ANSI colors to calculate real length
+    local plain=$(echo -e "$text" | sed 's/\x1b\[[0-9;]*m//g')
+    local len=${#plain}
+    local pad=$(( (width - len) / 2 ))
+    local spaces=""
+    for ((i=0; i<pad; i++)); do spaces+=" "; done
+    log_info "${spaces}${text}"
+}
+
 safe_exit() {
     local exit_code=${1:-0}
     if [ "$PUT_LOG" = true ] && [ -n "$LOG_FILE" ] && [ "$USE_JSON" = false ]; then
