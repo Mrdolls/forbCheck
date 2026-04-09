@@ -102,7 +102,7 @@ bash "$INSTALL_DIR/forb.sh" -gp <<EOF >> "$LOG_FILE" 2>&1
 y
 EOF
 
-echo -e "\n${GREEN}Installation complete! (v1.14.0)${NC}"
+echo -e "\n${GREEN}Installation complete! (v1.14.6)${NC}"
 echo -e "Documentation: ${CYAN}$DOC_DIR/doc_fr.md${NC}"
 echo -e "Logs: ${YELLOW}$LOG_FILE${NC}"
 echo -e "Please run: ${BLUE}source ~/.zshrc${NC} (or exec zsh/bash)"
