@@ -11,12 +11,13 @@ BIN_DIR="$INSTALL_DIR/bin"
 LIB_DIR="$INSTALL_DIR/lib"
 DOC_DIR="$INSTALL_DIR/doc"
 PRESET_DIR="$INSTALL_DIR/presets"
+LOG_DIR="$INSTALL_DIR/logs"
 REPO_RAW_URL="https://raw.githubusercontent.com/Mrdolls/forb/main"
-mkdir -p $INSTALL_DIR/logs
-LOG_FILE="$INSTALL_DIR/logs/install.log"
+
 
 # 1. Initialization
-mkdir -p "$LIB_DIR" "$DOC_DIR" "$PRESET_DIR" "$BIN_DIR"
+mkdir -p "$LIB_DIR" "$DOC_DIR" "$PRESET_DIR" "$BIN_DIR" "$LOG_DIR"
+LOG_FILE="$INSTALL_DIR/logs/install.log"
 echo "=== ForbCheck Installation Log - $(date) ===" > "$LOG_FILE"
 
 log_action() {
