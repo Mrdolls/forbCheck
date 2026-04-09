@@ -12,6 +12,7 @@ LIB_DIR="$INSTALL_DIR/lib"
 DOC_DIR="$INSTALL_DIR/doc"
 PRESET_DIR="$INSTALL_DIR/presets"
 REPO_RAW_URL="https://raw.githubusercontent.com/Mrdolls/forb/main"
+mkdir -p $INSTALL_DIR/logs
 LOG_FILE="$INSTALL_DIR/logs/install.log"
 
 # 1. Initialization
