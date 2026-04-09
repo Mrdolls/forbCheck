@@ -40,7 +40,7 @@ log_action "Fetching modules..."
 # Shell modules
 SH_MODULES=("ui.sh" "utils.sh" "presets.sh" "scan.sh" "output_generator.sh" "maintenance.sh" "html_generator.sh" "forb_completion.sh" "test_suite.sh")
 # Perl modules
-PL_MODULES=("macro_engine.pl" "source_scan.pl")
+PL_MODULES=("macro_engine.pl" "source_scan.pl" "symbol_filter"))
 
 for mod in "${SH_MODULES[@]}" "${PL_MODULES[@]}"; do
     echo -ne "  Downloading $mod...\r"
