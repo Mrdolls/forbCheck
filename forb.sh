@@ -44,13 +44,14 @@ DO_CREATE_PRESET=false
 DO_REMOVE_PRESET=false
 DO_EDIT_LIST=false
 RUN_LIST=false
+DO_ANALYSE=false
 LIST_FUNCS=""
 
 # OS Detection
 if [[ "$OSTYPE" == "darwin"* ]]; then readonly IS_MAC=true; else readonly IS_MAC=false; fi
 
 # Load Modules
-for module in ui.sh utils.sh presets.sh scan.sh output_generator.sh maintenance.sh html_generator.sh; do
+for module in ui.sh utils.sh presets.sh scan.sh output_generator.sh maintenance.sh html_generator.sh analyse.sh; do
     if [ -f "$INSTALL_DIR/lib/$module" ]; then
         source "$INSTALL_DIR/lib/$module"
     else
@@ -111,6 +112,7 @@ while [[ $# -gt 0 ]]; do
         -ol|--open-logs) DO_OPEN_LOGS=true; shift ;;
         -cp|--create-preset) DO_CREATE_PRESET=true; shift ;;
         -rp|--remove-preset) DO_REMOVE_PRESET=true; shift ;;
+        --analyse) DO_ANALYSE=true; shift ;;
         -e|--edit) DO_EDIT_LIST=true; shift ;;
         -l|--list)
             RUN_LIST=true; shift
@@ -144,6 +146,7 @@ if [ "$DO_OPEN_HTML" = true ]; then open_html; fi
 if [ "$DO_OPEN_LOGS" = true ]; then open_logs; fi
 if [ "$DO_CREATE_PRESET" = true ]; then create_preset; fi
 if [ "$DO_REMOVE_PRESET" = true ]; then remove_preset; fi
+if [ "$DO_ANALYSE" = true ]; then run_analyse_mode "${TARGET:-.}"; safe_exit 0; fi
 
 # 4. Initialize Logs
 if [ "$PUT_LOG" = true ]; then

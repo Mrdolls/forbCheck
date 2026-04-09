@@ -53,6 +53,7 @@ show_help() {
 
     echo -e "\n${BOLD}Deep Scan:${NC}"
     printf "  %-24s %s\n" "-s, --source" "Scan source files for unauthorized C functions"
+    printf "  %-24s %s\n" "--analyse" "Interactive analysis of project functions"
 
     echo -e "\n${BOLD}Library Filters:${NC}"
     printf "  %-24s %s\n" "-mlx" "Ignore MiniLibX internal calls"
