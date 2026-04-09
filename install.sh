@@ -18,6 +18,15 @@ LOG_DIR="$INSTALL_DIR/logs"
 REPO_URL="https://github.com/Mrdolls/forb"
 ARCHIVE_URL="$REPO_URL/archive/refs/heads/main.tar.gz"
 
+# Detect if running from local source (development mode)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/forb.sh" ] && [ -f "$SCRIPT_DIR/lib/analyse.sh" ]; then
+    USE_LOCAL=true
+    LOCAL_SOURCE="$SCRIPT_DIR"
+else
+    USE_LOCAL=false
+fi
+
 log_action() {
     [ -f "$LOG_FILE" ] && echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
@@ -27,39 +36,49 @@ echo -e "${BLUE}${BOLD}Starting ForbCheck installation...${NC}"
 mkdir -p "$LIB_DIR" "$DOC_DIR" "$PRESET_DIR" "$BIN_DIR" "$LOG_DIR"
 LOG_FILE="$LOG_DIR/install.log"
 echo "=== ForbCheck Installation Log - $(date) ===" > "$LOG_FILE"
+log_action "USE_LOCAL=$USE_LOCAL"
 
-# 2. Dependency Check
-echo -ne "  Checking dependencies... "
-for cmd in curl tar perl nm; do
-    if ! command -v "$cmd" &>/dev/null; then
-        echo -e "${RED}\nError: '$cmd' is required but not installed.${NC}"
-        exit 1
-    fi
-done
-echo -e "${GREEN}OK!${NC}"
+# 2. Dependency Check (skip if using local source)
+if [ "$USE_LOCAL" = false ]; then
+    echo -ne "  Checking dependencies... "
+    for cmd in curl tar perl nm; do
+        if ! command -v "$cmd" &>/dev/null; then
+            echo -e "${RED}\nError: '$cmd' is required but not installed.${NC}"
+            exit 1
+        fi
+    done
+    echo -e "${GREEN}OK!${NC}"
+fi
 
-# 3. Download and Extract Archive
-log_action "Fetching project archive from $ARCHIVE_URL"
-echo -ne "  Downloading and extracting components... "
-tmp_dir=$(mktemp -d)
-if curl -sL "$ARCHIVE_URL" | tar -xz -C "$tmp_dir" >> "$LOG_FILE" 2>&1; then
-    src_root="$tmp_dir/forb-main" # GitHub adds -main suffix
-    [ ! -d "$src_root" ] && src_root="$tmp_dir/$(ls -1 "$tmp_dir" | head -n 1)" # Fallback to first dir
-    
-    if [ ! -d "$src_root" ]; then
-        echo -e "${RED}\nError: Failed to find source directory in archive.${NC}"
+# 3. Get source files (local or remote)
+tmp_dir=""
+if [ "$USE_LOCAL" = true ]; then
+    echo -e "${CYAN}Installing from local source (development mode)${NC}"
+    src_root="$LOCAL_SOURCE"
+    log_action "Using local source: $src_root"
+else
+    log_action "Fetching project archive from $ARCHIVE_URL"
+    echo -ne "  Downloading and extracting components... "
+    tmp_dir=$(mktemp -d)
+    if curl -sL "$ARCHIVE_URL" | tar -xz -C "$tmp_dir" >> "$LOG_FILE" 2>&1; then
+        src_root="$tmp_dir/forb-main" # GitHub adds -main suffix
+        [ ! -d "$src_root" ] && src_root="$tmp_dir/$(ls -1 "$tmp_dir" | head -n 1)" # Fallback to first dir
+        
+        if [ ! -d "$src_root" ]; then
+            echo -e "${RED}\nError: Failed to find source directory in archive.${NC}"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+        echo -e "${GREEN}OK!${NC}"
+    else
+        echo -e "${RED}\nFatal Error: Failed to download or extract archive.${NC}"
         rm -rf "$tmp_dir"
         exit 1
     fi
-    echo -e "${GREEN}OK!${NC}"
-else
-    echo -e "${RED}\nFatal Error: Failed to download or extract archive.${NC}"
-    rm -rf "$tmp_dir"
-    exit 1
 fi
 
 # 4. Sync Components
-log_action "Syncing files..."
+log_action "Syncing files from: $src_root"
 
 # Main Script
 cp "$src_root/forb.sh" "$INSTALL_DIR/forb.sh"
@@ -122,12 +141,17 @@ configure_shell "$HOME/.zshrc" true >> "$LOG_FILE" 2>&1
 configure_shell "$HOME/.bashrc" false >> "$LOG_FILE" 2>&1
 
 # 6. Finalize Presets
-log_action "Fetching default presets..."
-echo -ne "  Synchronizing presets... "
-bash "$INSTALL_DIR/forb.sh" -gp <<EOF >> "$LOG_FILE" 2>&1
+if [ "$USE_LOCAL" = true ]; then
+    echo -e "  ${CYAN}Skipping preset sync (local install)${NC}"
+    log_action "Skipped preset sync - local install"
+else
+    log_action "Fetching default presets..."
+    echo -ne "  Synchronizing presets... "
+    bash "$INSTALL_DIR/forb.sh" -gp <<EOF >> "$LOG_FILE" 2>&1
 y
 EOF
-echo -e "${GREEN}OK!${NC}"
+    echo -e "${GREEN}OK!${NC}"
+fi
 
 # Cleanup
 rm -rf "$tmp_dir"
@@ -135,6 +159,9 @@ rm -rf "$tmp_dir"
 echo -e "\n${GREEN}${BOLD}Installation complete successfully! (v$VERSION)${NC}"
 echo -e "Documentation: ${CYAN}$DOC_DIR/doc_fr.md${NC}"
 echo -e "Logs: ${YELLOW}$LOG_FILE${NC}"
+if [ "$USE_LOCAL" = true ]; then
+    echo -e "${YELLOW}Installed from local source (development mode)${NC}"
+fi
 echo -e "Please run: ${BLUE}source ~/.zshrc${NC} (or exec zsh/bash)"
 
 log_action "Installation finished successfully."
