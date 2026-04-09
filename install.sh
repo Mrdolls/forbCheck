@@ -1,64 +1,89 @@
 #!/bin/bash
 
 # ==============================================================================
-#  ForbCheck - New Modular Installer
+#  ForbCheck - New Modular Installer (Dynamic Version)
 # ==============================================================================
 
-GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
+# Colors Configuration
+GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; CYAN='\033[0;36m'; NC='\033[0m'
+BOLD='\033[1m'
 
+# Constants
 INSTALL_DIR="$HOME/.forb"
 BIN_DIR="$INSTALL_DIR/bin"
 LIB_DIR="$INSTALL_DIR/lib"
 DOC_DIR="$INSTALL_DIR/doc"
 PRESET_DIR="$INSTALL_DIR/presets"
 LOG_DIR="$INSTALL_DIR/logs"
-REPO_RAW_URL="https://raw.githubusercontent.com/Mrdolls/forb/main"
-
-
-# 1. Initialization
-mkdir -p "$LIB_DIR" "$DOC_DIR" "$PRESET_DIR" "$BIN_DIR" "$LOG_DIR"
-LOG_FILE="$INSTALL_DIR/logs/install.log"
-echo "=== ForbCheck Installation Log - $(date) ===" > "$LOG_FILE"
+REPO_URL="https://github.com/Mrdolls/forb"
+ARCHIVE_URL="$REPO_URL/archive/refs/heads/main.tar.gz"
 
 log_action() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
+    [ -f "$LOG_FILE" ] && echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"
 }
 
-echo -e "${BLUE}Starting modular installation...${NC}"
+# 1. Initialization
+echo -e "${BLUE}${BOLD}Starting ForbCheck installation...${NC}"
+mkdir -p "$LIB_DIR" "$DOC_DIR" "$PRESET_DIR" "$BIN_DIR" "$LOG_DIR"
+LOG_FILE="$LOG_DIR/install.log"
+echo "=== ForbCheck Installation Log - $(date) ===" > "$LOG_FILE"
 
-# 2. Download Core
-log_action "Fetching main script..."
-curl -sfL "$REPO_RAW_URL/forb.sh" -o "$INSTALL_DIR/forb.sh" >> "$LOG_FILE" 2>&1
-
-if [ ! -s "$INSTALL_DIR/forb.sh" ]; then
-    echo -e "${RED}Error: Could not download forb.sh. Check your internet connection.${NC}"
-    log_action "ERROR: Failed to download forb.sh."
-    exit 1
-fi
-chmod +x "$INSTALL_DIR/forb.sh"
-
-# 3. Download Modules
-log_action "Fetching modules..."
-# Shell modules
-SH_MODULES=("ui.sh" "utils.sh" "presets.sh" "scan.sh" "output_generator.sh" "maintenance.sh" "html_generator.sh" "forb_completion.sh" "test_suite.sh")
-# Perl modules
-PL_MODULES=("macro_engine.pl" "source_scan.pl" "symbol_filter.pl" "menu.pl")
-
-for mod in "${SH_MODULES[@]}" "${PL_MODULES[@]}"; do
-    echo -ne "  Downloading $mod...\r"
-    curl -sfL "$REPO_RAW_URL/lib/$mod" -o "$LIB_DIR/$mod" >> "$LOG_FILE" 2>&1
-    if [ ! -s "$LIB_DIR/$mod" ]; then
-        echo -e "${RED}\nError: Failed to download $mod.${NC}"
-        log_action "ERROR: Failed to download $mod."
+# 2. Dependency Check
+echo -ne "  Checking dependencies... "
+for cmd in curl tar perl nm; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo -e "${RED}\nError: '$cmd' is required but not installed.${NC}"
         exit 1
     fi
 done
-echo -e "${GREEN}  All modules downloaded successfully!      ${NC}"
+echo -e "${GREEN}OK!${NC}"
 
-# 4. Download Documentation
-log_action "Fetching documentation..."
-curl -sfL "$REPO_RAW_URL/doc/doc_fr.md" -o "$DOC_DIR/doc_fr.md" >> "$LOG_FILE" 2>&1
-curl -sfL "$REPO_RAW_URL/doc/doc_en.md" -o "$DOC_DIR/doc_en.md" >> "$LOG_FILE" 2>&1
+# 3. Download and Extract Archive
+log_action "Fetching project archive from $ARCHIVE_URL"
+echo -ne "  Downloading and extracting components... "
+tmp_dir=$(mktemp -d)
+if curl -sL "$ARCHIVE_URL" | tar -xz -C "$tmp_dir" >> "$LOG_FILE" 2>&1; then
+    src_root="$tmp_dir/forb-main" # GitHub adds -main suffix
+    [ ! -d "$src_root" ] && src_root="$tmp_dir/$(ls -1 "$tmp_dir" | head -n 1)" # Fallback to first dir
+    
+    if [ ! -d "$src_root" ]; then
+        echo -e "${RED}\nError: Failed to find source directory in archive.${NC}"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    echo -e "${GREEN}OK!${NC}"
+else
+    echo -e "${RED}\nFatal Error: Failed to download or extract archive.${NC}"
+    rm -rf "$tmp_dir"
+    exit 1
+fi
+
+# 4. Sync Components
+log_action "Syncing files..."
+
+# Main Script
+cp "$src_root/forb.sh" "$INSTALL_DIR/forb.sh"
+chmod +x "$INSTALL_DIR/forb.sh"
+
+# Extract Version from forb.sh
+VERSION=$(grep -E "^(readonly )?VERSION=" "$INSTALL_DIR/forb.sh" | cut -d'"' -f2)
+
+# Library Modules
+echo -ne "  Installing modules... "
+for f in "$src_root/lib/"*; do
+    if [ -f "$f" ]; then
+        cp "$f" "$LIB_DIR/$(basename "$f")"
+        [[ "$f" == *.sh || "$f" == *.pl ]] && chmod +x "$LIB_DIR/$(basename "$f")"
+    fi
+done
+echo -e "${GREEN}OK!${NC}"
+
+# Documentation
+echo -ne "  Installing documentation... "
+for f in "$src_root/doc/"*; do
+    [ -f "$f" ] && cp "$f" "$DOC_DIR/$(basename "$f")"
+done
+echo -e "${GREEN}OK!${NC}"
 
 # 5. Setup Binary & Path
 ln -sf "$INSTALL_DIR/forb.sh" "$BIN_DIR/forb"
@@ -98,11 +123,16 @@ configure_shell "$HOME/.bashrc" false >> "$LOG_FILE" 2>&1
 
 # 6. Finalize Presets
 log_action "Fetching default presets..."
+echo -ne "  Synchronizing presets... "
 bash "$INSTALL_DIR/forb.sh" -gp <<EOF >> "$LOG_FILE" 2>&1
 y
 EOF
+echo -e "${GREEN}OK!${NC}"
 
-echo -e "\n${GREEN}Installation complete! (v1.14.6)${NC}"
+# Cleanup
+rm -rf "$tmp_dir"
+
+echo -e "\n${GREEN}${BOLD}Installation complete successfully! (v$VERSION)${NC}"
 echo -e "Documentation: ${CYAN}$DOC_DIR/doc_fr.md${NC}"
 echo -e "Logs: ${YELLOW}$LOG_FILE${NC}"
 echo -e "Please run: ${BLUE}source ~/.zshrc${NC} (or exec zsh/bash)"
