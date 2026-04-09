@@ -1,6 +1,6 @@
 # COMPLETE DOCUMENTATION - ForbCheck (forb.sh)
 
-**Version:** 1.14.6
+**Version:** 1.15.0
 **Author:** Mrdolls
 **Update Date:** 2026-04-09
 **Repository:** https://github.com/Mrdolls/forbCheck
@@ -132,7 +132,7 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 **Example:**
 ```bash
 ./forb.sh --version
-# Output: V1.14.6
+# Output: V1.15.0
 ```
 
 ---
@@ -159,7 +159,7 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.14.6",
+  "version": "1.15.0",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [

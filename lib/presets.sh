@@ -24,7 +24,6 @@ get_preset_list() {
 
 prompt_preset_menu() {
     [ "$DISABLE_AUTO" == "true" ] && log_info "\n${YELLOW}${BOLD}Auto-detection disabled by --no-auto flag.${NC}"
-    log_info "${CYAN}${BOLD}Select a project preset:${NC}"
 
     if [ ! -f "$PRESET_DIR/default.preset" ]; then
         mkdir -p "$PRESET_DIR"
@@ -33,21 +32,12 @@ prompt_preset_menu() {
 
     local presets=($(ls "$PRESET_DIR" 2>/dev/null | grep '\.preset$' | sed 's/\.preset//'))
     if [ -t 0 ] || [ -c /dev/tty ]; then
-        exec 3<&0
-        exec 0</dev/tty
-
-        PS3=$'\n\033[1;36mEnter the number of your preset: \033[0m'
-        select choice in "${presets[@]}"; do
-            if [ -n "$choice" ]; then
-                export SELECTED_PRESET="$choice"
-                log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
-                break
-            else
-                log_info "${RED}Invalid selection. Please enter a valid number.${NC}"
-            fi
-        done
-        exec 0<&3
-        exec 3<&-
+        export SELECTED_PRESET=$(perl "$INSTALL_DIR/lib/menu.pl" "${presets[@]}")
+        if [ $? -ne 0 ] || [ -z "$SELECTED_PRESET" ]; then
+            log_info "${RED}Preset selection aborted.${NC}"
+            safe_exit 1
+        fi
+        log_info "${GREEN}Loaded preset: ${BOLD}$SELECTED_PRESET${NC}"
     else
         log_info "${RED}Error: Non-interactive environment detected. Please explicitly provide a preset.${NC}"
         safe_exit 1

@@ -116,9 +116,15 @@ source_scan() {
     else
         files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
     fi
-    [ -z "$files_list" ] && safe_exit 1
+    if [ -z "$files_list" ]; then
+        log_info "${YELLOW}[Warning] No source files (*.c, *.cpp) found in this directory.${NC}"
+        safe_exit 0
+    fi
     local nb_files=$(echo "$files_list" | grep -c '^')
-    [ "$nb_files" -eq 0 ] && safe_exit 1
+    if [ "$nb_files" -eq 0 ]; then
+        log_info "${YELLOW}[Warning] No source files (*.c, *.cpp) found in this directory.${NC}"
+        safe_exit 0
+    fi
 
     parse_preset_flags "$(cat "$ACTIVE_PRESET" 2>/dev/null)"
     local p_mode="Whitelist"; [ "$BLACKLIST_MODE" = true ] && p_mode="Blacklist"
