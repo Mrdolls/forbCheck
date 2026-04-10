@@ -1,6 +1,6 @@
 # ForbCheck
 
-[![Version](https://img.shields.io/badge/version-1.16.0-00bcd4.svg)](https://github.com/Mrdolls/forbCheck)
+[![Version](https://img.shields.io/badge/version-1.16.1-00bcd4.svg)](https://github.com/Mrdolls/forbCheck)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/Mrdolls/forbCheck)
 
 **ForbCheck** is a powerful security and audit utility for C/C++ projects. It ensures codebase integrity by detecting unauthorized function calls through three specialized analysis modes.
