@@ -1,6 +1,6 @@
 # DOCUMENTATION COMPLÈTE - ForbCheck (forb.sh)
 
-**Version :** 1.16.0
+**Version :** 1.16.1
 **Auteur :** Mrdolls
 **Date de mise à jour :** 2026-04-10
 **Repository :** https://github.com/Mrdolls/forbCheck
@@ -132,7 +132,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 **Exemple :**
 ```bash
 ./forb.sh --version
-# Output: V1.16.0
+# Output: V1.16.1
 ```
 
 ---
@@ -159,7 +159,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.16.0",
+  "version": "1.16.1",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [
@@ -322,14 +322,16 @@ cat ~/.forb/logs/l1_*.log
 
 **Fonctionnalités du Dashboard :**
 - **Interface TUI Premium** : Design Cyan/Vert dynamique avec navigation clavier intuitive.
-- **Classification Automatique** : Sépare les fonctions internes (vos sources) des appels externes (système/libc).
-- **Deep Macro Scan** : Analyse récursive des `#define` pour débusquer les fonctions cachées au cœur de macros complexes.
+- **Classification & Visualisation** : Sépare les fonctions internes des appels externes. Les fonctions interdites apparaissent en **Rouge** avec un symbole d'alerte `⚠` sur la catégorie.
+- **Tri & Navigation Smart** : Les violations sont remontées en haut de liste. Le curseur se positionne automatiquement sur la première fonction valide pour un gain de temps optimal.
+- **Deep Macro Scan** : Analyse récursive des `#define` pour débusquer les fonctions cachées.
 - **Navigation par Fichiers** : Exploration de l'intégralité des fichiers du projet (incluant les Headers).
-- **Filtrage Intelligent des Macros** : Onglets horizontaux pour trier les macros (Header Guards, Numeric, Strings, etc.).
+- **Filtrage Intelligent** : Onglets horizontaux pour trier les macros et filtrage automatique des macros système (`S_ISDIR`, etc.).
 
 **Comportement :**
+- Affiche le nom du preset actif directement dans le titre du dashboard.
 - Utilise le **Skeleton Parsing** pour détecter les signatures de fonctions complexes.
-- **Zéro Faux Positif** : Si une définition existe, elle ne sera jamais marquée comme externe.
+- **Zéro Faux Positif** : Gestion robuste des chaînes multilignes et priorité absolue aux définitions internes.
 - Génère un journal d'audit complet dans `~/.forb/logs/analyse_engine.log`.
 
 ---

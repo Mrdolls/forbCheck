@@ -5,7 +5,7 @@ use File::Basename;
 use utf8;
 
 # ==============================================================================
-#  FORBCHECK ANALYSE TUI (v1.16.0) - UTF-8 & COLLISION STABLE
+#  FORBCHECK ANALYSE TUI (v1.16.1) - UTF-8 & COLLISION STABLE
 # ==============================================================================
 
 binmode STDOUT, ":utf8";
@@ -35,13 +35,43 @@ while (<$fh>) {
 }
 close $fh;
 
-my @funcs_all   = sort { lc($a->{name}) cmp lc($b->{name}) } (@funcs_int, @funcs_ext);
-my @macros_all  = sort { lc($a->{name}) cmp lc($b->{name}) } @macros;
-my @files_meta  = map  { { name => $_, file => $_ } } sort keys %file_to_funcs;
-
 # --- Colors ---
-my ($NC, $BOLD, $CYAN, $BLUE, $GREEN, $DIM, $WHITE) =
-    ("\e[0m", "\e[1m", "\e[36m", "\e[34m", "\e[32m", "\e[2m", "\e[37m");
+my ($NC, $BOLD, $CYAN, $BLUE, $GREEN, $DIM, $WHITE, $RED) =
+    ("\e[0m", "\e[1m", "\e[36m", "\e[34m", "\e[32m", "\e[2m", "\e[37m", "\e[31m");
+
+# --- Forbidden Logic ---
+my %auth_map = map { $_ => 1 } split(' ', $meta{auth_funcs} // "");
+my $is_blacklist = ($meta{blacklist_mode} // "false") eq "true";
+
+sub is_forbidden {
+    my $name = shift or return 0;
+    if ($is_blacklist) {
+        return exists $auth_map{$name} ? 1 : 0;
+    } else {
+        return exists $auth_map{$name} ? 0 : 1;
+    }
+}
+
+# --- Sorting & Initialization ---
+# --- Sorting & Initialization ---
+@funcs_int = sort { lc($a->{name}) cmp lc($b->{name}) } @funcs_int;
+@macros    = sort { lc($a->{name}) cmp lc($b->{name}) } @macros;
+
+@funcs_ext = sort { 
+    my $ea = is_forbidden($a->{name});
+    my $eb = is_forbidden($b->{name});
+    $eb <=> $ea || lc($a->{name}) cmp lc($b->{name}) 
+} @funcs_ext;
+
+my @funcs_all = sort { 
+    # Prioritize External Forbidden first
+    my $fa = (exists $a->{file} ? 0 : is_forbidden($a->{name}));
+    my $fb = (exists $b->{file} ? 0 : is_forbidden($b->{name}));
+    $fb <=> $fa || lc($a->{name}) cmp lc($b->{name}) 
+} (@funcs_int, @funcs_ext);
+
+my @macros_all  = @macros;
+my @files_meta  = map  { { name => $_, file => $_ } } sort keys %file_to_funcs;
 
 # --- Terminal size ---
 my ($T_H, $T_W) = (24, 80);
@@ -130,7 +160,8 @@ sub render {
     if ($state eq "MAIN") {
         my $sw   = ($w > 82 ? 78 : $w - 4); $sw = 40 if $sw < 40;
         my $col  = int(($w - $sw) / 2) + 1;
-        my $title  = "FORBCHECK - PROJECT ANALYSIS DASHBOARD";
+        my $p_name = $meta{preset_name} // "DEFAULT";
+        my $title  = "FORBCHECK - PROJECT ANALYSIS DASHBOARD - $p_name";
         my $tl     = length $title;
         my $pad_l  = int(($sw - 2 - $tl) / 2); $pad_l = 0 if $pad_l < 0;
         my $pad_r  = $sw - 2 - $tl - $pad_l;   $pad_r = 0 if $pad_r < 0;
@@ -140,22 +171,31 @@ sub render {
         $out .= at(3,$col) . "${CYAN}└" . "─" x ($sw-2) . "┘${NC}";
 
         my @items = (
-            [ "Internal Functions",  scalar @funcs_int   ],
-            [ "External Functions",  scalar @funcs_ext   ],
-            [ "Constants & Macros",    scalar @macros      ],
-            [ "All Functions",       scalar @funcs_all   ],
-            [ "Files of Project",    scalar @files_meta  ],
+            [ "Internal Functions",  scalar @funcs_int,  \@funcs_int ],
+            [ "External Functions",  scalar @funcs_ext,  \@funcs_ext ],
+            [ "Constants & Macros",    scalar @macros,     \@macros    ],
+            [ "All Functions",       scalar @funcs_all,  \@funcs_all  ],
+            [ "Files of Project",    scalar @files_meta, []          ],
         );
 
         for (my $i = 0; $i < @items; $i++) {
             my $row = 6 + $i;
             last if $row >= $h;
             my $count = sprintf("(%d)", $items[$i][1]);
+            my $has_forbidden = 0;
+            if ($items[$i][2] && @{$items[$i][2]}) {
+                for my $f (@{$items[$i][2]}) {
+                    # Only external functions count for the category warning
+                    if (!exists $f->{file} && is_forbidden($f->{name})) { $has_forbidden = 1; last; }
+                }
+            }
+            
+            my $warn = $has_forbidden ? " ${RED}⚠${NC}" : "";
             my $label = sprintf("%-24s %s", $items[$i][0], $count);
             if ($i == $sel) {
-                $out .= at($row, $col + 4) . "${GREEN}●${NC} ${GREEN}${BOLD}$label${NC}";
+                $out .= at($row, $col + 4) . "${GREEN}●${NC} ${GREEN}${BOLD}$label${NC}$warn";
             } else {
-                $out .= at($row, $col + 4) . "  ${CYAN}$label${NC}";
+                $out .= at($row, $col + 4) . "  ${CYAN}$label${NC}$warn";
             }
         }
         $out .= at($h, $col + 4) . "${DIM}[↑↓] Navigate | [Enter] Select | [ESC] Exit${NC}";
@@ -208,12 +248,18 @@ sub render {
                 my $prefix = ($item->{type} && $item->{type} eq "MACRO") ? "${DIM}[M] ${NC}" : "";
                 my $name   = $prefix . vtrunc($item->{name} // "", $list_w - vlen($prefix));
                 
+                my $col = ${CYAN};
+                if (is_forbidden($item->{name})) {
+                    # ONLY Forbidden EXTERNAL functions are RED
+                    $col = $RED unless $item->{file}; 
+                }
+                
                 if ($item->{is_header}) {
                     $out .= at($row, 2) . "${DIM}  $name${NC}";
                 } elsif ($idx == $sel) {
                     $out .= at($row, 2) . "${GREEN}${BOLD}▶ $name${NC}"; 
                 } else {
-                    $out .= at($row, 2) . "  ${CYAN}$name${NC}";
+                    $out .= at($row, 2) . "  ${col}$name${NC}";
                 }
             }
         }
@@ -331,9 +377,14 @@ while (1) {
             my @map = qw(LIST_INT LIST_EXT LIST_MACROS LIST_ALL LIST_FILES);
             $state = $map[$sel] // "MAIN";
             ($sel, $scroll, $search, $dirty_filter) = (0, 0, "", 1);
-            # Skip initial header
+
+            # Skip forbidden functions at the start so the cursor begins on the first allowed one
             my ($t, $items, $type) = state_meta();
-            $sel++ while ($sel < $#$items && $items->[$sel]{is_header});
+            if ($items && @$items) {
+                while ($sel < $#$items && is_forbidden($items->[$sel]{name}) && !$items->[$sel]{file}) {
+                    $sel++;
+                }
+            }
         }
         $needs_redraw = 1;
     }

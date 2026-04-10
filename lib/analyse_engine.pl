@@ -4,7 +4,7 @@ use warnings;
 use File::Basename;
 
 # ==============================================================================
-#  FORBCHECK ANALYSE ENGINE (v1.16.0 - Refactored)
+#  FORBCHECK ANALYSE ENGINE (v1.16.1 - Refactored)
 # ==============================================================================
 
 my @files = <STDIN>;
@@ -38,7 +38,7 @@ sub v_log { print $log_fh "[LOG] " . join(" ", @_) . "\n"; }
 
 # --- Keywords and Types to ignore ---
 my $types = qr/(?:int|char|float|double|long|short|unsigned|signed|void|size_t|ssize_t|pid_t|sig_atomic_t|bool|t_\w+|struct\s+\w+|enum\s+\w+|FILE|DIR)/;
-my $kw = qr/^(if|while|for|return|else|switch|case|default|do|sizeof|typedef|static|extern|inline|const|volatile|void|char|int|long|short|float|double|unsigned|signed|struct|enum|union|size_t|del|f)$/;
+my $kw = qr/^(if|while|for|return|else|switch|case|default|do|sizeof|typedef|static|extern|inline|const|volatile|void|char|int|long|short|float|double|unsigned|signed|struct|enum|union|size_t|del|f|va_arg|va_start|va_end|va_list)$/;
 
 # --- Macro Typing Logic ---
 sub detect_macro_type {
@@ -122,14 +122,24 @@ print STDERR "\e[34m[Analyse] Mapping calls...\e[0m\n";
 foreach my $file (@files) {
     next unless $file =~ /\.(c|cpp|h|hpp)$/; 
     open(my $fh, "<", $file) or next;
-    my $lnum = 0;
-    while (my $line = <$fh>) {
-        $lnum++;
-        my $clean = $line;
-        # Fast strip for line-by-line mapping
-        $clean =~ s/\/\*.*?\*\///g; $clean =~ s{//.*}{}g;
-        $clean =~ s/"(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27/ /g;
-        
+    my $content = do { local $/; <$fh> };
+    close($fh);
+
+    # Robust multi-line stripping (matches Step 1)
+    my $stripped = $content;
+    $stripped =~ s/\r//g; 
+    $stripped =~ s{(/\*.*?\*/)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+    $stripped =~ s{//.*}{}g;
+    $stripped =~ s{("(?:\\.|[^"\\])*"|\x27(?:\\.|[^\x27\\])*\x27)}{ my $c = $1; my $n = () = $c =~ /\n/g; "\n" x $n }egs;
+
+    my @lines_orig = split(/\n/, $content);
+    my @lines_clean = split(/\n/, $stripped);
+
+    for (my $i = 0; $i < @lines_clean; $i++) {
+        my $lnum = $i + 1;
+        my $clean = $lines_clean[$i];
+        my $orig  = $lines_orig[$i];
+
         # 2.1 Basic check
         while ($clean =~ /\b([a-zA-Z_]\w*)\s*\(/g) {
             my $fname = $1;
@@ -137,30 +147,27 @@ foreach my $file (@files) {
             next if $macros{$fname}; # If it's a macro, we expand it next
             
             if (!$internal_funcs{$fname}) {
-                push @{$external_funcs{$fname}}, { file => $file, line => $lnum, context => $line };
+                push @{$external_funcs{$fname}}, { file => $file, line => $lnum, context => $orig };
             }
-            push @{$loc_data{$fname}}, { file => $file, line => $lnum, context => $line };
+            push @{$loc_data{$fname}}, { file => $file, line => $lnum, context => $orig };
         }
         
         # 2.2 Macro-Expansion check (v4.0)
-        # Scan for calling known macros and see if they contain function calls
         foreach my $m_name (keys %macros) {
             next unless ($macros{$m_name}->{type} // "") =~ /Macro|Function/;
-            if ($line =~ /\b$m_name\b/) {
+            if ($clean =~ /\b$m_name\b/) {
                 my $body = $macros{$m_name}->{body} // "";
                 while ($body =~ /\b([a-zA-Z_]\w*)\s*\(/g) {
                     my $fname = $1;
                     next if $fname =~ $kw || length($fname) <= 2;
-                    v_log("  [Deep] Call to $fname found hidden in macro $m_name in $file:$lnum");
                     if (!$internal_funcs{$fname}) {
-                        push @{$external_funcs{$fname}}, { file => $file, line => $lnum, context => $line . " (via $m_name)" };
+                        push @{$external_funcs{$fname}}, { file => $file, line => $lnum, context => $orig . " (via $m_name)" };
                     }
-                    push @{$loc_data{$fname}}, { file => $file, line => $lnum, context => $line . " (via $m_name)" };
+                    push @{$loc_data{$fname}}, { file => $file, line => $lnum, context => $orig . " (via $m_name)" };
                 }
             }
         }
     }
-    close($fh);
 }
 
 # --- STEP 3: Format Output & Logging ---
@@ -175,6 +182,9 @@ print "META|total_files|$total_files\n";
 print "META|total_internal|" . scalar(keys %internal_funcs) . "\n";
 print "META|total_external|" . scalar(keys %external_funcs) . "\n";
 print "META|total_macros|" . scalar(keys %macros) . "\n";
+print "META|auth_funcs|" . ($ENV{AUTH_FUNCS} // "") . "\n";
+print "META|blacklist_mode|" . ($ENV{BLACKLIST_MODE} // "false") . "\n";
+print "META|preset_name|" . uc($ENV{SELECTED_PRESET} // "default") . "\n";
 
 foreach my $f (sort keys %internal_funcs) {
     my $d = $internal_funcs{$f};
@@ -187,11 +197,13 @@ foreach my $f (sort keys %external_funcs) {
     next if $internal_funcs{$f};
     
     # Identify if it's a known system macro
+    # This list covers standard macros that shouldn't be treated as forbidden functions
     my $type = "FUNC";
     if ($f =~ /^(WIFEXITED|WEXITSTATUS|WIFSIGNALED|WTERMSIG|S_ISDIR|S_ISREG|S_ISLNK|S_ISCHR|S_ISBLK|S_ISFIFO|S_ISSOCK)$/) {
         $type = "MACRO";
     }
     
+    next if $type eq "MACRO"; # Exclude system macros from External Functions list
     print "FUNC_EXT|$f|" . scalar(@{$external_funcs{$f}}) . "|$type\n";
 }
 

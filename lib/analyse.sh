@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#  FORBCHECK ANALYSIS MODULE (v1.16.0)
+#  FORBCHECK ANALYSIS MODULE (v1.16.1)
 
 start_analysis() {
     local files_list=""
@@ -19,6 +19,14 @@ start_analysis() {
 
     local nb_files=$(echo "$files_list" | grep -c '^')
     log_info "${CYAN}${BOLD}Analyzing project...${NC}"
+
+    # Charger le preset pour identifier les fonctions interdites
+    resolve_preset "binary"
+    load_preset "$SELECTED_PRESET"
+    parse_preset_flags "$(cat "$ACTIVE_PRESET" 2>/dev/null)"
+    # Ensure AUTH_FUNCS is on a single line (space separated) for Perl metadata extraction
+    export AUTH_FUNCS=$(echo "$AUTH_FUNCS" | tr '\n' ' ' | xargs)
+    export BLACKLIST_MODE
 
     # Appel du moteur d'extraction en Perl
     local data_file=$(mktemp)

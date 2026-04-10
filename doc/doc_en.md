@@ -1,6 +1,6 @@
 # COMPLETE DOCUMENTATION - ForbCheck (forb.sh)
 
-**Version:** 1.16.0
+**Version:** 1.16.1
 **Author:** Mrdolls
 **Update Date:** 2026-04-10
 **Repository:** https://github.com/Mrdolls/forbCheck
@@ -132,7 +132,7 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 **Example:**
 ```bash
 ./forb.sh --version
-# Output: V1.16.0
+# Output: V1.16.1
 ```
 
 ---
@@ -159,7 +159,7 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.16.0",
+  "version": "1.16.1",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [
@@ -321,15 +321,17 @@ cat ~/.forb/logs/l1_*.log
 **Description:** Opens the interactive Project Analysis Dashboard (TUI) for a deep dive into your project structure.
 
 **Dashboard Features:**
-- **Premium TUI Interface**: Dynamic Cyan/Green design with intuitive keyboard navigation.
-- **Automatic Classification**: Separates internal functions (your sources) from external calls (system/libc).
+- **Classification & Visualization**: Separates internal functions from external calls. Forbidden functions appear in **Red** with a `⚠` warning symbol on the category.
+- **Smart Sorting & Navigation**: Violations are automatically moved to the top. The cursor starts on the first valid function to save time.
 - **Deep Macro Scan**: Recursive analysis of `#define` to find hidden calls.
-- **Smart Macro Filtering**: Horizontal tabs for sorting macros.
+- **File Navigation**: Exploration of all project files (including Headers).
+- **Smart Filtering**: Horizontal tabs for macro sorting and automatic filtering of system macros (`S_ISDIR`, etc.).
 
 **Behavior:**
+- Displays the active preset name directly in the dashboard title.
 - Uses **Skeleton Parsing** for flawless signature detection.
-- **Zero False Positives**: Internal functions take absolute priority.
-- Highly optimized for large C projects (42 style).
+- **Zero False Positives**: Robust handling of multiline strings and absolute priority for internal definitions.
+- Generates a full audit log in `~/.forb/logs/analyse_engine.log`.
 
 **Behavior:**
 - Measures time from scan start to finish
