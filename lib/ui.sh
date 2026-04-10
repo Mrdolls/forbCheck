@@ -54,9 +54,10 @@ show_help() {
     echo -e "\n${BOLD}Deep Scan:${NC}"
     printf "  %-24s %s\n" "-s, --source" "Scan source files for unauthorized C functions"
 
-    echo -e "\n${BOLD}Library Filters:${NC}"
-    printf "  %-24s %s\n" "-mlx" "Ignore MiniLibX internal calls"
     printf "  %-24s %s\n" "-lm" "Ignore Math library internal calls"
+
+    echo -e "\n${BOLD}Analysis:${NC}"
+    printf "  %-24s %s\n" "-A, --analyse" "Open interactive project analysis dashboard"
 
     echo -e "\n${BOLD}Maintenance:${NC}"
     printf "  %-24s %s\n" "-t, --time" "Show execution duration"
