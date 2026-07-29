@@ -1310,4 +1310,4 @@ fi
 
 **Fin de la documentation**
 
-*Cette documentation est complète pour la version 1.14.5 de ForbCheck. Les futures versions peuvent introduire des changements.*
+*Cette documentation est complète pour la version 1.16.1 de ForbCheck. Les futures versions peuvent introduire des changements.*
