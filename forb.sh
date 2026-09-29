@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Constants
-readonly VERSION="1.16.1" # Interactive analysis
+readonly VERSION="1.16.2" # Interactive analysis
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"
@@ -88,6 +88,7 @@ set -- "${args[@]}"
 # 2. Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -w|--warnings) export SHOW_WARNINGS=true; shift ;;
         -h|--help) SHOW_HELP=true; shift ;;
         --version) SHOW_VERSION=true; shift ;;
         --json) USE_JSON=true; shift ;;
@@ -213,6 +214,9 @@ if [ "$FORBIDDEN_COUNT" -gt 0 ]; then
     center_log "${RED}RESULT: FAILURE${NC}"
 else
     center_log "${GREEN}RESULT: PERFECT${NC}"
+    if [ "${WARNINGS_COUNT:-0}" -gt 0 ] && [ "$SHOW_WARNINGS" != true ]; then
+        center_log "${YELLOW}($WARNINGS_COUNT warning(s) hidden | use -w to show)${NC}"
+    fi
 fi
 [ "$SHOW_TIME" = true ] && center_log "${BLUE}Execution time:${NC} ${CYAN}${DURATION}s${NC}"
 [ $total_errors -ne 0 ] && safe_exit 1

@@ -5,7 +5,7 @@ _forb_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="-h --help --json --html -l --list -e --edit \
+    opts="-w -h --help --json --html -l --list -e --edit \
           -P --preset -np --no-preset -gp --get-presets -cp --create-preset \
           -lp --list-presets -op --open-presets -rp --remove-preset -oh --open-html -ol --open-logs \
           -b --blacklist -v --verbose -f -p --full-path -a --all --no-auto \

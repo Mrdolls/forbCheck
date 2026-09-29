@@ -104,8 +104,14 @@ scan_source_engine() {
 }
 
 source_scan() {
+    # 1. On force la détection du binaire via le Makefile AVANT le preset
+    auto_detect_target >/dev/null 2>&1
+    auto_detect_libraries >/dev/null 2>&1
+
+    # 2. On charge et on lit le preset immédiatement
     resolve_preset "source"
     load_preset "$SELECTED_PRESET"
+    parse_preset_flags "$(cat "$ACTIVE_PRESET" 2>/dev/null)"
 
     local _src_start=$(get_timestamp)
     
@@ -114,8 +120,14 @@ source_scan() {
         for f in $SPECIFIC_FILES; do [ -f "$f" ] && files_list+="$f"$'\n'; done
         files_list=$(echo "$files_list" | sed '/^$/d')
     else
-        files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+        # 3. On filtre physiquement le dossier MLX de la recherche
+        if [ "$USE_MLX" = true ]; then
+            files_list=$(find . -maxdepth 5 -type d \( -name "*mlx*" -o -name "*minilibx*" \) -prune -o -type f \( -name "*.c" -o -name "*.cpp" \) -print)
+        else
+            files_list=$(find . -maxdepth 5 -type f \( -name "*.c" -o -name "*.cpp" \))
+        fi
     fi
+
     if [ -z "$files_list" ]; then
         log_info "${YELLOW}[Warning] No source files (*.c, *.cpp) found in this directory.${NC}"
         safe_exit 0
@@ -193,7 +205,7 @@ filter_forbidden_functions() {
 }
 
 print_analysis_report() {
-    local f_name spec_locs errors=0
+    local f_name spec_locs errors=0 warnings=0
     for f_name in $forbidden_list; do
         spec_locs=$(grep -E ":.*\b${f_name}\b" <<< "$grep_res")
         if [ -n "$spec_locs" ]; then
@@ -211,12 +223,34 @@ print_analysis_report() {
                 fi
             done <<< "$spec_locs"
         elif [ -z "$SPECIFIC_FILES" ]; then
-            log_info "   [${YELLOW}WARNING${NC}]   -> $f_name"
-            local objs=$(grep -E " U ${f_name}$" <<< "$ALL_UNDEFINED" | awk -F: '{split($1, path, "/"); print path[length(path)]}' | sort -u | tr '\n' ' ')
-            log_info "          ${YELLOW}↳ Found in objects: ${BLUE}${objs}${NC}"
-            [[ "$f_name" =~ ^(strlen|memset|memcpy|printf|puts|putchar)$ ]] && log_info " ${CYAN}(Builtin?)${NC}" || log_info " ${CYAN}(Sync?)${NC}"
+            # On vérifie quels fichiers .o de l'étudiant réclament cette fonction
+            local objs=$(grep -E " U ${f_name}$" <<< "$ALL_UNDEFINED" | awk -F: '{split($1, path, "/"); print path[length(path)]}' | sort -u | xargs)
+            
+            # LA MAGIE ICI : Si aucun de tes .o ne l'appelle, c'est purement interne à la librairie, on supprime le warning !
+            if [ -z "$objs" ]; then
+                continue
+            fi
+
+            warnings=$((warnings + 1))
+            if [ "$SHOW_WARNINGS" = true ]; then
+                log_info "   [${YELLOW}WARNING${NC}]   -> $f_name"
+                log_info "          ${YELLOW}↳ Found in objects: ${BLUE}${objs}${NC}"
+                [[ "$f_name" =~ ^(strlen|memset|memcpy|printf|puts|putchar)$ ]] && log_info " ${CYAN}(Builtin?)${NC}" || log_info " ${CYAN}(Sync?)${NC}"
+            fi
         fi
     done
+    
+    if [ "$SHOW_WARNINGS" = true ] && [ "$warnings" -gt 0 ]; then
+        local tip_msg=" Tip: Add '-fno-builtin' to your CFLAGS to prevent fake 'Builtin' functions."
+        if [ "$USE_MLX" = true ]; then
+            tip_msg="$tip_msg Note that external libraries like MLX will also generate unavoidable 'Sync?' warnings."
+        fi
+        log_info "\n   ${CYAN}${tip_msg}${NC}"
+    fi
+
+    export FORBIDDEN_COUNT=$errors
+    export WARNINGS_COUNT=$warnings
+
     return $errors
 }
 

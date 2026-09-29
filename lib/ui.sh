@@ -25,6 +25,7 @@ show_help() {
     printf "  %-24s %s\n" "<target>" "Executable or library to analyze"
 
     echo -e "\n${BOLD}General:${NC}"
+    printf "  %-24s %s\n" "-w, --warnings" "Show hidden compiler/library warnings (Sync/Builtin)"
     printf "  %-24s %s\n" "-h, --help" "Show help message"
     printf "  %-24s %s\n" "--json" "Generate a JSON output for automations"
     printf "  %-24s %s\n" "--html" "Generate a beautiful interactive HTML report"

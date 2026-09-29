@@ -42,9 +42,16 @@ my ($NC, $BOLD, $CYAN, $BLUE, $GREEN, $DIM, $WHITE, $RED) =
 # --- Forbidden Logic ---
 my %auth_map = map { $_ => 1 } split(' ', $meta{auth_funcs} // "");
 my $is_blacklist = ($meta{blacklist_mode} // "false") eq "true";
+my $use_mlx = ($ENV{USE_MLX} // "false") eq "true";
 
 sub is_forbidden {
     my $name = shift or return 0;
+    
+    # On ignore silencieusement la MLX si le flag est actif
+    if (!$is_blacklist && $use_mlx && $name =~ /^mlx_/) {
+        return 0;
+    }
+    
     if ($is_blacklist) {
         return exists $auth_map{$name} ? 1 : 0;
     } else {
