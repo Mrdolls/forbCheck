@@ -1,8 +1,8 @@
 # DOCUMENTATION COMPLÈTE - ForbCheck (forb.sh)
 
-**Version :** 1.16.1
+**Version :** 1.16.3
 **Auteur :** Mrdolls
-**Date de mise à jour :** 2026-04-10
+**Date de mise à jour :** 2026-10-03
 **Repository :** https://github.com/Mrdolls/forbCheck
 
 ---
@@ -132,7 +132,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 **Exemple :**
 ```bash
 ./forb.sh --version
-# Output: V1.16.1
+# Output: V1.16.3
 ```
 
 ---
@@ -159,7 +159,7 @@ Si une dépendance manque, ForbCheck affichera une erreur et quittera avec le co
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.16.1",
+  "version": "1.16.3",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [
@@ -388,6 +388,28 @@ cat ~/.forb/logs/l1_*.log
 ```bash
 ./forb.sh -s -v              # Mode source verbeux
 ./forb.sh -v ./binary        # Mode binaire verbeux
+```
+
+---
+
+#### `-w` / `--warnings`
+
+**Syntaxe :**
+```bash
+./forb.sh -w [OPTIONS] <target>
+./forb.sh --warnings [OPTIONS] <target>
+```
+
+**Description :** Affiche les **avertissements détaillés** sur les fonctions internes ou builtins (ajouté en v1.16.2).
+
+**Comportement :**
+- Par défaut, si des fonctions non autorisées proviennent uniquement de builtins du compilateur (comme `strlen`, `memset`, `memcpy`, `printf`, `puts`, `putchar`) ou de dépendances de bibliothèques externes, ForbCheck les masque et indique : `(X warning(s) hidden | use -w to show)`.
+- Avec `-w`, ces avertissements sont détaillés en indiquant les fichiers objets (`.o`) qui les réclament.
+- Fournit des conseils d'optimisation (par exemple, ajouter `-fno-builtin` aux `CFLAGS` pour éviter les fausses fonctions builtins).
+
+**Exemple :**
+```bash
+./forb.sh -w ./binary        # Affiche les avertissements masqués
 ```
 
 ---
@@ -1310,4 +1332,4 @@ fi
 
 **Fin de la documentation**
 
-*Cette documentation est complète pour la version 1.16.1 de ForbCheck. Les futures versions peuvent introduire des changements.*
+*Cette documentation est complète pour la version 1.16.3 de ForbCheck. Les futures versions peuvent introduire des changements.*

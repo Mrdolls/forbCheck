@@ -207,21 +207,32 @@ filter_forbidden_functions() {
 print_analysis_report() {
     local f_name spec_locs errors=0 warnings=0
     for f_name in $forbidden_list; do
-        spec_locs=$(grep -E ":.*\b${f_name}\b" <<< "$grep_res")
+        local safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
+        spec_locs=$(grep -E ":.*\b${safe_name}[[:space:]]*\(" <<< "$grep_res")
+        local valid_locs=""
         if [ -n "$spec_locs" ]; then
+            while read -r line; do
+                [ -z "$line" ] && continue
+                local f_path=$(echo "$line" | cut -d: -f1); local l_num=$(echo "$line" | cut -d: -f2)
+                local snippet=$(echo "$line" | cut -d: -f3- | sed 's/^[[:space:]]*//')
+                if clean_code_snippet "$snippet" "$f_name" >/dev/null; then
+                    valid_locs+="$line"$'\n'
+                fi
+            done <<< "$spec_locs"
+        fi
+
+        if [ -n "$valid_locs" ]; then
             log_info "   [${RED}FORBIDDEN${NC}] -> $f_name"
             [ -z "$SPECIFIC_FILES" ] && errors=$((errors + 1))
             while read -r line; do
                 [ -z "$line" ] && continue
                 local f_path=$(echo "$line" | cut -d: -f1); local l_num=$(echo "$line" | cut -d: -f2)
                 local snippet=$(echo "$line" | cut -d: -f3- | sed 's/^[[:space:]]*//')
-                if clean_code_snippet "$snippet" "$f_name" >/dev/null; then
-                    local d_name=$( [ "$FULL_PATH" = true ] && echo "$f_path" | sed 's|^\./||' || basename "$f_path" )
-                    local prefix=$( [ -n "$SPECIFIC_FILES" ] && [ "$VERBOSE" = false ] && echo "line ${l_num}" || echo "${d_name}:${l_num}" )
-                    if [ "$VERBOSE" = true ]; then log_info "          ${YELLOW}↳ Location: ${BLUE}${prefix}${NC}: ${CYAN}$(crop_line "$f_name" "$snippet")${NC}"
-                    else log_info "          ${YELLOW}↳ Location: ${BLUE}${prefix}${NC}"; fi
-                fi
-            done <<< "$spec_locs"
+                local d_name=$( [ "$FULL_PATH" = true ] && echo "$f_path" | sed 's|^\./||' || basename "$f_path" )
+                local prefix=$( [ -n "$SPECIFIC_FILES" ] && [ "$VERBOSE" = false ] && echo "line ${l_num}" || echo "${d_name}:${l_num}" )
+                if [ "$VERBOSE" = true ]; then log_info "          ${YELLOW}↳ Location: ${BLUE}${prefix}${NC}: ${CYAN}$(crop_line "$f_name" "$snippet")${NC}"
+                else log_info "          ${YELLOW}↳ Location: ${BLUE}${prefix}${NC}"; fi
+            done <<< "$valid_locs"
         elif [ -z "$SPECIFIC_FILES" ]; then
             # On vérifie quels fichiers .o de l'étudiant réclament cette fonction
             local objs=$(grep -E " U ${f_name}$" <<< "$ALL_UNDEFINED" | awk -F: '{split($1, path, "/"); print path[length(path)]}' | sort -u | xargs)
@@ -258,7 +269,7 @@ build_grep_results() {
     local f_name safe_name; grep_res=""
     for f_name in $forbidden_list; do
         safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
-        local args=("-rHE" "\b${safe_name}\b" ".")
+        local args=("-rHE" "\b${safe_name}[[:space:]]*\(" ".")
         if [ -n "$SPECIFIC_FILES" ]; then for f in $SPECIFIC_FILES; do args+=("--include=$f"); done
         else args+=("--include=*.c"); fi
         grep_res+="$(grep "${args[@]}" -n 2>/dev/null | grep -vE "mlx|MLX")"$'\n'

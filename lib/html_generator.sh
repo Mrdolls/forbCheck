@@ -147,7 +147,7 @@ EOF
         else
             for f_name in $forbidden_list; do
                 safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
-                local locations=$(grep -E ":.*\b${safe_name}\b" <<< "$grep_res")
+                local locations=$(grep -E ":.*\b${safe_name}[[:space:]]*\(" <<< "$grep_res")
                 while read -r line; do
                     [ -z "$line" ] && continue
                     local f_path=$(echo "$line" | cut -d: -f1 | sed 's|^\./||')

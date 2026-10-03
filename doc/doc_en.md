@@ -1,8 +1,8 @@
 # COMPLETE DOCUMENTATION - ForbCheck (forb.sh)
 
-**Version:** 1.16.1
+**Version:** 1.16.3
 **Author:** Mrdolls
-**Update Date:** 2026-04-10
+**Update Date:** 2026-10-03
 **Repository:** https://github.com/Mrdolls/forbCheck
 
 ---
@@ -132,7 +132,7 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 **Example:**
 ```bash
 ./forb.sh --version
-# Output: V1.16.1
+# Output: V1.16.3
 ```
 
 ---
@@ -159,7 +159,7 @@ If a dependency is missing, ForbCheck will display an error and exit with code 1
 ```json
 {
   "target": "<binary_path>",
-  "version": "1.16.1",
+  "version": "1.16.3",
   "forbidden_count": 5,
   "mode": "whitelist",
   "results": [
@@ -393,6 +393,28 @@ cat ~/.forb/logs/l1_*.log
 ```bash
 ./forb.sh -s -v              # Verbose source mode
 ./forb.sh -v ./binary        # Verbose binary mode
+```
+
+---
+
+#### `-w` / `--warnings`
+
+**Syntax:**
+```bash
+./forb.sh -w [OPTIONS] <target>
+./forb.sh --warnings [OPTIONS] <target>
+```
+
+**Description:** Displays **detailed warnings** about internal or builtin functions (added in v1.16.2).
+
+**Behavior:**
+- By default, if unauthorized functions originate strictly from compiler builtins (such as `strlen`, `memset`, `memcpy`, `printf`, `puts`, `putchar`) or external library dependencies, ForbCheck hides them and displays: `(X warning(s) hidden | use -w to show)`.
+- With `-w`, these warnings are shown with details indicating which object files (`.o`) request them.
+- Provides optimization advice (such as adding `-fno-builtin` to `CFLAGS` to avoid fake builtin function warnings).
+
+**Example:**
+```bash
+./forb.sh -w ./binary        # Displays hidden warnings
 ```
 
 ---
@@ -1242,4 +1264,4 @@ fi
 
 **End of Documentation**
 
-*This documentation is complete for ForbCheck version 1.14.5. Future versions may introduce changes.*
+*This documentation is complete for ForbCheck version 1.16.3. Future versions may introduce changes.*

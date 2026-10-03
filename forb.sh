@@ -5,7 +5,7 @@
 # ==============================================================================
 
 # Constants
-readonly VERSION="1.16.2" # Interactive analysis
+readonly VERSION="1.16.3" # Interactive analysis
 readonly INSTALL_DIR="$HOME/.forb"
 readonly LOG_DIR="$HOME/.forb/logs"
 readonly PRESET_DIR="$INSTALL_DIR/presets"

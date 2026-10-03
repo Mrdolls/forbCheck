@@ -25,7 +25,7 @@ generate_json_output() {
             [ "$first_func" = false ] && echo -n ","
             echo -n "{\"function\":\"$f_name\",\"locations\":["
             safe_name=$(printf '%s\n' "$f_name" | sed 's/[.[\*^$]/\\&/g')
-            local locations=$(grep -E ":.*\b${safe_name}\b" <<< "$grep_res")
+            local locations=$(grep -E ":.*\b${safe_name}[[:space:]]*\(" <<< "$grep_res")
             local first_loc=true
             while read -r line; do
                 [ -z "$line" ] && continue; [ "$first_loc" = false ] && echo -n ","

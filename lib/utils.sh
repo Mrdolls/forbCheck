@@ -127,7 +127,7 @@ clean_code_snippet() {
     snippet=$(echo "$snippet" | sed 's|//.*||')
     snippet=$(echo "$snippet" | sed 's|/\*.*\*/||g')
 
-    if echo "$snippet" | grep -qE "\b${safe_name}\b"; then
+    if echo "$snippet" | grep -qE "\b${safe_name}[[:space:]]*\("; then
         echo "$snippet"
         return 0
     else
